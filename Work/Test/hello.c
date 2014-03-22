@@ -6,7 +6,8 @@ int main() {
 	int a[25];
 	int x;
 
-	a[3] = 10;
+	a[25] = 3;
+	a[28] = 10;
 	x = a[3];	
 	
 	return 0;
