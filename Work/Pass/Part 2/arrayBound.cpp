@@ -39,6 +39,9 @@ namespace {
 			 
 				//If there is an array instruction - find declartion of all variables
 			     	if (I1->getOpcode()==29){	
+
+
+					
 					//Find the element that is being indexed
 					Value* indexValue = I1->getOperand(2);
 					ConstantInt* indexConstant = dyn_cast<ConstantInt>(indexValue);	
@@ -56,6 +59,9 @@ namespace {
 					}else{
 						continue;
 					}
+ICmpInst* test = new ICmpInst(CmpInst::ICMP_EQ, indexValue, indexValue,"foo");				
+//AllocaInst* pa = new AllocaInst(allocInstr->getType() , 0, "indexLoc");
+I1->getParent()->getInstList().insert(I1, test);
 
 					//Get number of elements in array
 					PointerType *pt = allocInstr->getType();
@@ -72,6 +78,7 @@ namespace {
 							Line = Loc.getLineNumber();
 						}
 
+						//Print error
 						errs()<<"Index outside of array bounds\n Line:"<<Line<<"\n Access index " <<arrayIndex<<" of array "<<allocInstr->getName()<<" of size "<<arraySize<<"\n\n";
 
 					}				
@@ -82,9 +89,40 @@ namespace {
 
 			}
 
+
+/*
+BasicBlock*
+MyCompiler::handle_if( BasicBlock* bb, SetCondInst* condition )
+{
+    // Create the blocks to contain code in the structure of if/then/else
+    BasicBlock* then = new BasicBlock(); 
+    BasicBlock* else = new BasicBlock();
+    BasicBlock* exit = new BasicBlock();
+
+    // Insert the branch instruction for the "if"
+    bb->getInstList().push_back( new BranchInst( then, else, condition ) );
+
+    // Set up the terminating instructions
+    then->getInstList().push_back( new BranchInst( exit ) );
+    else->getInstList().push_back( new BranchInst( exit ) );
+
+    // Fill in the then part .. details excised for brevity
+    this->fill_in( then );
+
+    // Fill in the else part .. details excised for brevity
+    this->fill_in( else );
+
+    // Return a block to the caller that can be filled in with the code
+    // that follows the if/then/else construct.
+    return exit;
+}*/
+
+
+
+
 			//Print out a list of instructions
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
-       				//errs()<<*i<<'\n'<<i->getOpcode()<<'\n';
+       				errs()<<*i<<'\n'<<i->getOpcode()<<'\n';
    			}
 			
 			return 1;
