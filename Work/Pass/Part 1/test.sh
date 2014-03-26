@@ -1,5 +1,4 @@
-clang++ -c arrayBound.cpp `llvm-config --cxxflags`;
-clang++ -shared -o pass.so arrayBound.o `llvm-config --ldflags`
-opt -load ./pass.so -arrayBound <../../Test/hello.bc> result.bc
+clang++ -c CSE6142.cpp `llvm-config --cxxflags`;
+clang++ -shared -o pass.so CSE6142.o `llvm-config --ldflags`
+opt -load ./pass.so -CSE6142 <../../Test/hello.bc> result.bc
 lli result.bc
-

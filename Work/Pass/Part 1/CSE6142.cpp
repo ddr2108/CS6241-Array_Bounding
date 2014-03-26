@@ -1,9 +1,11 @@
 #include "llvm/IR/Function.h"
+#include "llvm/Support/InstIterator.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/DebugInfo.h"
 #include <map>
 #include <set>
 #include <queue>
@@ -23,90 +25,109 @@ namespace
 		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
 
-		virtual bool runOnFunction(Function &F)
-		{
+		virtual bool runOnFunction(Function &F){
+
+			//Queue of blocks
 			queue<BasicBlock*> nextBlocks;
 			nextBlocks.push(&F.getEntryBlock());
 
-			while(!nextBlocks.empty())
-			{
+			//Visit until nore more blocks left
+			while(!nextBlocks.empty()){
+				//Get next block
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
 
+				//If already have gone to this block, skip it
 				if(visited.find(block) != visited.end()) continue;
-
 				visited.insert(block);
 
-				//bool shouldBreak = false;
-				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++)
-				{
-					if(AllocaInst* alloc = dyn_cast<AllocaInst>(inst))
-					{
-						//Only map arrays
-						if(alloc->isArrayAllocation())
-						{
-							AllocaInst* mapInst = new AllocaInst(llvm::IntegerType::get(block->getContext(), 64)
-								, Twine("SizeMap"), inst);
+				//Visit the instructions
+				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++){
 
-							//errs() << *alloc->getOperand(0) << "\n";
-							StoreInst* storeInst = new StoreInst(alloc->getOperand(0), mapInst, mapInst);
-							mapInst->moveBefore(storeInst);
-							errs() << *inst << "\n";
+					//if it is an allocate instruction
+					if(AllocaInst* alloc = dyn_cast<AllocaInst>(inst)){
 
-							arraySizeMap[alloc] = mapInst;
+						PointerType *pt = alloc->getType();
+
+						//If it is an array
+						if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())){
+							//get size							
+							int arraySize = at->getNumElements();
+							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 64),arraySize,false);
+							//Store size
+							arraySizeMap[alloc] = newValue;
 						}
 					}
 
 					//An array element is being retrieved. We need to check if it's inbounds
-					if(&*inst != &block->front())
-					if(Instruction* getInst = dyn_cast<GetElementPtrInst>(inst))
-					{
-						//Get the defined size from the map
-						Value* maxSize = arraySizeMap[getInst->getOperand(0)];
-						//errs() << *maxSize << "\n";
+					if(&*inst != &block->front()){
+						if(Instruction* getInst = dyn_cast<GetElementPtrInst>(inst)){
+							//If the index is constant, static analysis should have caught it
+							llvm::ConstantInt* CI = dyn_cast<llvm::ConstantInt>(getInst->getOperand(2));
+							if (CI==NULL) {		//Runtime analysis
 
-						//Convert the size from a pointer to an int
-						Value* matchingType = new PtrToIntInst(maxSize, getInst->getOperand(1)->getType(), 
-							Twine("PTR"), getInst);
+								//Get the defined size from the map
+								Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
 
-						//errs() << *getInst->getOperand(1) << "\n";
+								//Check to see if the index is less than the size
+								ICmpInst* boundCheck = 
+									new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(2), 
+									sizeArray, Twine("CmpTest"));
+								BasicBlock* nextBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
+							
+								//Create a new exit block
+								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), 
+									Twine(block->getName() + "exit"), &F);
+								ReturnInst::Create(block->getContext(), 
+									ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
 
-						//Check to see if the index is less than the size
-						ICmpInst* boundCheck = 
-							new ICmpInst(getInst, CmpInst::ICMP_SGT, getInst->getOperand(1), 
-							matchingType, Twine("CmpTest"));
-						BasicBlock* nextBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
+								//Remove the temporary terminator
+								block->getTerminator()->eraseFromParent();
 
-						//Create a new exit block
-						BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), 
-							Twine(block->getName() + "exit"), &F);
-						ReturnInst::Create(block->getContext(), 
-							ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
-						errs() << *errorBlock << "\n";
+								//Add our own terminator condition
+								BranchInst::Create(nextBlock, errorBlock, boundCheck, block);
 
-						//Remove the temporary terminator
-						block->getTerminator()->eraseFromParent();
+								//shouldBreak = true;
+								nextBlocks.push(nextBlock);
+								break;
+							}else{		//Static analysis
+								
+								int arrayIndex = CI->getZExtValue(); 	//Pull out the array index
 
-						//Add our own terminator condition
-						BranchInst::Create(nextBlock, errorBlock, boundCheck, block);
+								//Get the defined size from the map
+								Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
+								llvm::ConstantInt* CI2 = dyn_cast<llvm::ConstantInt>(sizeArray);
+								int arraySize = CI2->getZExtValue(); 	//Pull out the array index
 
-						//shouldBreak = true;
-						nextBlocks.push(nextBlock);
-						break;
+								//Check size of array vs index
+								if (arrayIndex>=arraySize){
 
-						errs() << *boundCheck << "\n";
+									//Get line number
+									unsigned Line;
+									if (MDNode *N = getInst->getMetadata("dbg")) {
+										DILocation Loc(N);                     
+										Line = Loc.getLineNumber();
+									}
+
+									//Print error
+									errs()<<"Index outside of array bounds\n Line:"<<Line<<"\n Access index " <<arrayIndex<<" of array "<<getInst->getOperand(0)->getName()<<" of size "<<arraySize<<"\n\n";
+
+								}				
+
+							}
+
+						}
 					}
 
-					if(TerminatorInst* termInst = dyn_cast<TerminatorInst>(inst))
-					{
+					//add new blocks to go to
+					if(TerminatorInst* termInst = dyn_cast<TerminatorInst>(inst)){
 						int numSucc = termInst->getNumSuccessors();
-						for(int i = 0; i < numSucc; i++)
-						{
+						for(int i = 0; i < numSucc; i++){
 							nextBlocks.push(termInst->getSuccessor(i));
 						}
 					}
 				}
-				//if(shouldBreak) break;
+
 			}
 
 			return false;
