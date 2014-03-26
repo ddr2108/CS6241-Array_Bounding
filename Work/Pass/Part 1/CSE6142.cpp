@@ -46,32 +46,40 @@ namespace
 
 					//if it is an allocate instruction
 					if(AllocaInst* alloc = dyn_cast<AllocaInst>(inst)){
-
+						//if array
+						if(alloc->isArrayAllocation()){
+							arraySizeMap[alloc] = alloc->getOperand(0);
+						}
+						
 						PointerType *pt = alloc->getType();
-
-						//If it is an array
+						//If it is an array and the previous if statement did not catch it
 						if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())){
 							//get size							
 							int arraySize = at->getNumElements();
 							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 64),arraySize,false);
 							//Store size
 							arraySizeMap[alloc] = newValue;
+
+
 						}
 					}
 
 					//An array element is being retrieved. We need to check if it's inbounds
 					if(&*inst != &block->front()){
-						if(Instruction* getInst = dyn_cast<GetElementPtrInst>(inst)){
-							//If the index is constant, static analysis should have caught it
-							llvm::ConstantInt* CI = dyn_cast<llvm::ConstantInt>(getInst->getOperand(2));
-							if (CI==NULL) {		//Runtime analysis
+						if(GetElementPtrInst* getInst = dyn_cast<GetElementPtrInst>(inst)){
+							//Get index into array
+							int indexOperand = getInst->getNumIndices();
+							llvm::ConstantInt* CI = dyn_cast<llvm::ConstantInt>(getInst->getOperand(indexOperand));
+							
+							//Get info about array
+							Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
+							llvm::ConstantInt* CI2 = dyn_cast<llvm::ConstantInt>(sizeArray);
 
-								//Get the defined size from the map
-								Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
+							if (CI==NULL || CI2==NULL) {		//Runtime analysis
 
 								//Check to see if the index is less than the size
 								ICmpInst* boundCheck = 
-									new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(2), 
+									new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), 
 									sizeArray, Twine("CmpTest"));
 								BasicBlock* nextBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
 							
@@ -90,13 +98,9 @@ namespace
 								//shouldBreak = true;
 								nextBlocks.push(nextBlock);
 								break;
-							}else{		//Static analysis
+							}else{		//Static analysis - constant size and index
 								
 								int arrayIndex = CI->getZExtValue(); 	//Pull out the array index
-
-								//Get the defined size from the map
-								Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
-								llvm::ConstantInt* CI2 = dyn_cast<llvm::ConstantInt>(sizeArray);
 								int arraySize = CI2->getZExtValue(); 	//Pull out the array index
 
 								//Check size of array vs index
@@ -129,6 +133,12 @@ namespace
 				}
 
 			}
+
+			//Print out resulting assembly
+			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
+       				//errs()<<*i<<'\n';
+   			}
+
 
 			return false;
 		}
