@@ -77,26 +77,31 @@ namespace
 
 							if (CI==NULL || CI2==NULL) {		//Runtime analysis
 
-								//Check to see if the index is less than the size
-								ICmpInst* boundCheck = 
-									new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), 
-									sizeArray, Twine("CmpTest"));
-								BasicBlock* nextBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
-							
 								//Create a new exit block
-								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), 
-									Twine(block->getName() + "exit"), &F);
+								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
 								ReturnInst::Create(block->getContext(), 
 									ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
 
-								//Remove the temporary terminator
-								block->getTerminator()->eraseFromParent();
+									
+								//Check to see if the index is less than the size
+								ICmpInst* upperBoundCheck =  new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), sizeArray, Twine("CmpTestUpper"));
+								BasicBlock* followingBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
 
+
+								//Check to see if index is negative
+								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
+								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
+								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
+
+
+
+								//Modify exisiting block
+								block->getTerminator()->eraseFromParent(); //Remove the temporary terminator
 								//Add our own terminator condition
-								BranchInst::Create(nextBlock, errorBlock, boundCheck, block);
+								BranchInst::Create(secondCheckBlock, errorBlock, upperBoundCheck, block);
 
-								//shouldBreak = true;
-								nextBlocks.push(nextBlock);
+								nextBlocks.push(followingBlock);
 								break;
 							}else{		//Static analysis - constant size and index
 								
@@ -104,7 +109,7 @@ namespace
 								int arraySize = CI2->getZExtValue(); 	//Pull out the array index
 
 								//Check size of array vs index
-								if (arrayIndex>=arraySize){
+								if (arrayIndex>=arraySize || arrayIndex<0){
 
 									//Get line number
 									unsigned Line;
