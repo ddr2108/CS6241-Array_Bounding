@@ -22,8 +22,105 @@ namespace
 		static char ID;
 		CSE6142() : FunctionPass(ID){}
 
+		struct Output
+		{
+			set<Value*> outSet;
+			map<Value*, BasicBlock*> outSrc;
+		};
+
 		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
+
+		map<BasicBlock*, Output> outputs;
+		map<BasicBlock*, set<Value*> > genSet;
+		map<BasicBlock*, Output* > inSet;
+		map<BasicBlock*, set<BasicBlock*> > pred;
+
+		set<Value*> backwards(Output* output, BasicBlock* block)
+		{
+			set<Value*> S;
+			/*for(set<Value*>::iterator itr = output->begin(); itr != output->end(); itr++)
+			{
+			}*/
+
+			return S;
+		}
+
+		void calculateSets(BasicBlock* term)
+		{
+			queue<BasicBlock*> toVisit;
+			toVisit.push(term);
+
+			while(!toVisit.empty())
+			{
+				BasicBlock* block = toVisit.front();
+				toVisit.pop();
+
+				//Retrieve genset and pred
+				set<Value*> gen = genSet[block];
+				set<BasicBlock*> predecessors = pred[block];
+				Output* outset = &outputs[block];
+				Output* inset = inSet[block];
+
+				//Get successors
+				TerminatorInst* termInst = block->getTerminator();
+				int numSucc = termInst->getNumSuccessors();
+				set<BasicBlock*> successors;
+				for(int i = 0; i < numSucc; i++) successors.insert(termInst->getSuccessor(i));
+
+				set<Value*> S = backwards(outset, block);
+
+				//Clear sets
+				inset->outSet.clear();
+				inset->outSrc.clear();
+
+				//Add genset to c_in
+				for(set<Value*>::iterator itr = gen.begin(); itr != gen.end(); itr++)
+				{
+					inset->outSet.insert(*itr);
+					inset->outSrc[*itr] = block;
+				}
+				//Add backward() return
+				for(set<Value*>::iterator itr = S.begin(); itr != S.end(); itr++)
+				{
+					inset->outSet.insert(*itr);
+					inset->outSrc[*itr] = block;
+				}
+
+				//Create c_out set
+				for(set<BasicBlock*>::iterator itr = successors.begin(); itr != successors.end(); itr++)
+				{
+					Output* succ = inSet[*itr];
+					//Loop through successor values
+					for(set<Value*>::iterator comp = succ->outSet.begin(); comp != succ->outSet.end(); comp++)
+					{
+						if(itr == successors.begin())
+						{
+							outset->outSet.insert(*comp);
+							outset->outSrc[*comp] = succ->outSrc[*comp];
+						}
+						else
+						{
+							set<Value*> toRemove;
+
+							//See if the comparison is in the c_in set
+							for(set<Value*>::iterator outItr = outset->outSet.begin(); outItr != outset->outSet.end(); outItr++)
+							{
+								if(succ->outSet.find(*outItr) == succ->outSet.end())
+									toRemove.insert(*outItr);
+							}
+
+							for(set<Value*>::iterator outItr = toRemove.begin(); outItr != toRemove.end(); outItr++)
+							{
+								outset->outSet.erase(*outItr);
+								outset->outSrc.erase(*outItr);
+							}
+						}
+					}
+				}
+				
+			}
+		}
 
 		virtual bool runOnFunction(Function &F){
 
@@ -40,6 +137,10 @@ namespace
 				//If already have gone to this block, skip it
 				if(visited.find(block) != visited.end()) continue;
 				visited.insert(block);
+
+				//Gen set
+				set<Value*> c_gen;
+				genSet[block] = c_gen;
 
 				//Visit the instructions
 				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++){
@@ -85,12 +186,14 @@ namespace
 									
 								//Check to see if the index is less than the size
 								ICmpInst* upperBoundCheck =  new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), sizeArray, Twine("CmpTestUpper"));
+								c_gen.insert(upperBoundCheck);
 								BasicBlock* followingBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
 								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
+								c_gen.insert(lowerBoundCheck);
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
 
 
@@ -130,7 +233,9 @@ namespace
 					if(TerminatorInst* termInst = dyn_cast<TerminatorInst>(inst)){
 						int numSucc = termInst->getNumSuccessors();
 						for(int i = 0; i < numSucc; i++){
-							nextBlocks.push(termInst->getSuccessor(i));
+							BasicBlock* term = termInst->getSuccessor(i);
+							nextBlocks.push(term);
+							pred[term].insert(block);
 						}
 					}
 				}
