@@ -34,7 +34,7 @@ namespace
 		map<BasicBlock*, Output* > outputs;
 		map<BasicBlock*, set<Value*>* > genSet;
 		map<BasicBlock*, Output* > inSet;
-		map<BasicBlock*, set<BasicBlock*>* > pred;
+		map<BasicBlock*, set<BasicBlock*> > pred;
 
 		set<Value*>* backwards(Output* output, BasicBlock* block)
 		{
@@ -72,7 +72,7 @@ namespace
 
 				//Retrieve genset and pred
 				set<Value*>* gen = genSet[block];
-				set<BasicBlock*>* predecessors = pred[block];
+				set<BasicBlock*> predecessors = pred[block];
 				Output* outset = outputs[block];
 				Output* inset = inSet[block];
 
@@ -149,10 +149,10 @@ namespace
 					inset->outSrc[*itr] = block;
 				}
 
-				errs() << "size: " << predecessors->size() << "\n";
+				errs() << "size: " << predecessors.size() << "\n";
 
 				//Add predecessors
-				for(set<BasicBlock*>::iterator itr = predecessors->begin(); itr != predecessors->end(); itr++)
+				for(set<BasicBlock*>::iterator itr = predecessors.begin(); itr != predecessors.end(); itr++)
 				{
 					toVisit.push(*itr);
 				}
@@ -236,7 +236,7 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);												
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
 								c_gen->insert(lowerBoundCheck);
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
@@ -281,7 +281,7 @@ namespace
 						for(int i = 0; i < numSucc; i++){
 							BasicBlock* term = termInst->getSuccessor(i);
 							nextBlocks.push(term);
-							pred[term]->insert(block);
+							pred[term].insert(block);
 							errs() << "Adding\n";
 						}
 					}
