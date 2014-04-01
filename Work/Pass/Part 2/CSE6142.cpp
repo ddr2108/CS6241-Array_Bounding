@@ -31,17 +31,31 @@ namespace
 		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
 
-		map<BasicBlock*, Output> outputs;
-		map<BasicBlock*, set<Value*> > genSet;
+		map<BasicBlock*, Output* > outputs;
+		map<BasicBlock*, set<Value*>* > genSet;
 		map<BasicBlock*, Output* > inSet;
-		map<BasicBlock*, set<BasicBlock*> > pred;
+		map<BasicBlock*, set<BasicBlock*>* > pred;
 
-		set<Value*> backwards(Output* output, BasicBlock* block)
+		set<Value*>* backwards(Output* output, BasicBlock* block)
 		{
-			set<Value*> S;
-			/*for(set<Value*>::iterator itr = output->begin(); itr != output->end(); itr++)
+			errs() << "backwards\n";
+			set<Value*>* S = new set<Value*>();
+
+			set<Value*>* gen = genSet[block];
+
+			//O(n^2) loop to check for matching compares
+			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
 			{
-			}*/
+				CmpInst* inst = dyn_cast<CmpInst>(*itr);
+
+				errs() << *inst->getOperand(0) << "\n";
+				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
+				{
+					CmpInst* localInst = dyn_cast<CmpInst>(*localItr);
+
+					if(localInst->getOperand(0) == localInst->getOperand(0));
+				}
+			}
 
 			return S;
 		}
@@ -57,10 +71,19 @@ namespace
 				toVisit.pop();
 
 				//Retrieve genset and pred
-				set<Value*> gen = genSet[block];
-				set<BasicBlock*> predecessors = pred[block];
-				Output* outset = &outputs[block];
+				set<Value*>* gen = genSet[block];
+				set<BasicBlock*>* predecessors = pred[block];
+				Output* outset = outputs[block];
 				Output* inset = inSet[block];
+
+				errs() << "Gen: " << gen->size() << "\n";
+
+				if(inset == NULL)
+				{
+					errs() << "Creating inset for block: " << block->getName() << "\n";
+					inset = new Output();
+					inSet[block] = inset;
+				}
 
 				//Get successors
 				TerminatorInst* termInst = block->getTerminator();
@@ -68,29 +91,16 @@ namespace
 				set<BasicBlock*> successors;
 				for(int i = 0; i < numSucc; i++) successors.insert(termInst->getSuccessor(i));
 
-				set<Value*> S = backwards(outset, block);
-
-				//Clear sets
-				inset->outSet.clear();
-				inset->outSrc.clear();
-
-				//Add genset to c_in
-				for(set<Value*>::iterator itr = gen.begin(); itr != gen.end(); itr++)
-				{
-					inset->outSet.insert(*itr);
-					inset->outSrc[*itr] = block;
-				}
-				//Add backward() return
-				for(set<Value*>::iterator itr = S.begin(); itr != S.end(); itr++)
-				{
-					inset->outSet.insert(*itr);
-					inset->outSrc[*itr] = block;
-				}
 
 				//Create c_out set
 				for(set<BasicBlock*>::iterator itr = successors.begin(); itr != successors.end(); itr++)
 				{
 					Output* succ = inSet[*itr];
+					if(succ == NULL)
+					{
+						errs() << "ERROR: Null inset found for block: " << (*itr)->getName() << "\n";
+						continue;
+					}
 					//Loop through successor values
 					for(set<Value*>::iterator comp = succ->outSet.begin(); comp != succ->outSet.end(); comp++)
 					{
@@ -118,6 +128,34 @@ namespace
 						}
 					}
 				}
+
+				errs() << "Outset size: " << outset->outSet.size() << "\n";
+				set<Value*>* S = backwards(outset, block);
+
+				//Clear sets
+				inset->outSet.clear();
+				inset->outSrc.clear();
+
+				//Add genset to c_in
+				for(set<Value*>::iterator itr = gen->begin(); itr != gen->end(); itr++)
+				{
+					inset->outSet.insert(*itr);
+					inset->outSrc[*itr] = block;
+				}
+				//Add backward() return
+				for(set<Value*>::iterator itr = S->begin(); itr != S->end(); itr++)
+				{
+					inset->outSet.insert(*itr);
+					inset->outSrc[*itr] = block;
+				}
+
+				errs() << "size: " << predecessors->size() << "\n";
+
+				//Add predecessors
+				for(set<BasicBlock*>::iterator itr = predecessors->begin(); itr != predecessors->end(); itr++)
+				{
+					toVisit.push(*itr);
+				}
 				
 			}
 		}
@@ -128,18 +166,22 @@ namespace
 			queue<BasicBlock*> nextBlocks;
 			nextBlocks.push(&F.getEntryBlock());
 
+			BasicBlock* lastBlock;
+
 			//Visit until nore more blocks left
 			while(!nextBlocks.empty()){
 				//Get next block
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
 
+				lastBlock = block;
+
 				//If already have gone to this block, skip it
 				if(visited.find(block) != visited.end()) continue;
 				visited.insert(block);
 
 				//Gen set
-				set<Value*> c_gen;
+				set<Value*>* c_gen = new set<Value*>();
 				genSet[block] = c_gen;
 
 				//Visit the instructions
@@ -178,6 +220,9 @@ namespace
 
 							if (CI==NULL || CI2==NULL) {		//Runtime analysis
 
+								errs() << "Runtime\n";
+
+
 								//Create a new exit block
 								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
 								ReturnInst::Create(block->getContext(), 
@@ -186,14 +231,14 @@ namespace
 									
 								//Check to see if the index is less than the size
 								ICmpInst* upperBoundCheck =  new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), sizeArray, Twine("CmpTestUpper"));
-								c_gen.insert(upperBoundCheck);
+								c_gen->insert(upperBoundCheck);
 								BasicBlock* followingBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
 								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
-								c_gen.insert(lowerBoundCheck);
+								c_gen->insert(lowerBoundCheck);
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
 
 
@@ -227,6 +272,7 @@ namespace
 							}
 
 						}
+
 					}
 
 					//add new blocks to go to
@@ -235,10 +281,12 @@ namespace
 						for(int i = 0; i < numSucc; i++){
 							BasicBlock* term = termInst->getSuccessor(i);
 							nextBlocks.push(term);
-							pred[term].insert(block);
+							pred[term]->insert(block);
+							errs() << "Adding\n";
 						}
 					}
 				}
+				errs() << genSet.size() << " : " << genSet[block]->size() << "\n";
 
 			}
 
@@ -293,6 +341,8 @@ namespace
 				}
 			
 			}
+
+			//calculateSets(lastBlock);
 
 
 			//Print out resulting assembly

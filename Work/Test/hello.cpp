@@ -2,8 +2,9 @@
 #include <stdlib.h>
 
 int test(){
-	int size = 5;
-	int a[25];
+	int size = 25;
+	int a[size];
+	bool branchIf = false;
 
 	int x,y;
 	int z;
@@ -17,15 +18,19 @@ int test(){
 	printf("Before");
 	b[z] = 10;
 	printf("After");
+	if(branchIf)printf("Branch");
 	printf("Before");
 	b[4] = 10;
 	printf("After");
+	if(branchIf)printf("Branch");
 	printf("Before");
 	a[5] = 10;
 	printf("After");
+	if(branchIf)printf("Branch");
 	printf("Before");
 	a[28] = 10;
 	printf("After");
+	if(branchIf)printf("Branch");
 	x = a[30];	
 	return 1;
 }
