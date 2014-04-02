@@ -41,22 +41,31 @@ namespace
 			set<Value*>* S = new set<Value*>();
 
 			set<Value*>* gen = genSet[block];
-			errs() << "backwards: " << gen->size() << "\n";
+			//errs() << "backwards: " << gen->size() << "\n";
 
 			//O(n^2) loop to check for matching compares
 			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
 			{
 				CmpInst* inst = dyn_cast<CmpInst>(*itr);
 
-				errs() << *inst->getOperand(0) << "\n";
+				//errs() << gen->size() << "\n";
+				bool conflict = false;
 				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
 				{
 					CmpInst* localInst = dyn_cast<CmpInst>(*localItr);
 
-					if(localInst->getOperand(0) == localInst->getOperand(0));
+					errs() << *localInst << " vs " << *inst << "\n";
+
+					if(localInst->getOperand(0) == localInst->getOperand(0))
+					{
+						errs() << "Matching = " << *localInst << "\n";
+					}
 				}
+
+				if(!conflict) S->insert(*itr);
 			}
 
+			errs() << "S size: " << S->size() << "\n";
 			return S;
 		}
 
@@ -69,6 +78,8 @@ namespace
 			{
 				BasicBlock* block = toVisit.front();
 				toVisit.pop();
+
+				errs() << block->getName() << "\n";
 
 				//Retrieve genset and pred
 				set<Value*>* gen = genSet[block];
@@ -88,7 +99,7 @@ namespace
 				{
 					//errs() << "Creating outset for block: " << block->getName() << "\n";
 					outset = new Output();
-					inSet[block] = outset;
+					outputs[block] = outset;
 				}
 
 				//Get successors
@@ -97,6 +108,11 @@ namespace
 				set<BasicBlock*> successors;
 				for(int i = 0; i < numSucc; i++) successors.insert(termInst->getSuccessor(i));
 
+				//Clear sets
+				inset->outSet.clear();
+				inset->outSrc.clear();
+				outset->outSet.clear();
+				outset->outSrc.clear();
 
 				//Create c_out set
 				for(set<BasicBlock*>::iterator itr = successors.begin(); itr != successors.end(); itr++)
@@ -104,14 +120,15 @@ namespace
 					Output* succ = inSet[*itr];
 					if(succ == NULL)
 					{
-						//errs() << "ERROR: Null inset found for block: " << (*itr)->getName() << "\n";
+						errs() << "ERROR(" << block->getName() << "): Null inset found for block: " << (*itr)->getName() << "\n";
 						continue;
 					}
 					//Loop through successor values
 					for(set<Value*>::iterator comp = succ->outSet.begin(); comp != succ->outSet.end(); comp++)
 					{
-						if(itr == successors.begin())
+						if(true || itr == successors.begin())
 						{
+							errs() << "!@#$\n";
 							outset->outSet.insert(*comp);
 							outset->outSrc[*comp] = succ->outSrc[*comp];
 						}
@@ -128,19 +145,15 @@ namespace
 
 							for(set<Value*>::iterator outItr = toRemove.begin(); outItr != toRemove.end(); outItr++)
 							{
-								outset->outSet.erase(*outItr);
-								outset->outSrc.erase(*outItr);
+								//outset->outSet.erase(*outItr);
+								//outset->outSrc.erase(*outItr);
 							}
 						}
 					}
 				}
+				errs() << "OutSet size: " << outset->outSet.size() << "\n";
 
-				//errs() << "Outset size: " << outset->outSet.size() << "\n";
 				set<Value*>* S = backwards(outset, block);
-
-				//Clear sets
-				inset->outSet.clear();
-				inset->outSrc.clear();
 
 				//Add genset to c_in
 				for(set<Value*>::iterator itr = gen->begin(); itr != gen->end(); itr++)
@@ -154,6 +167,8 @@ namespace
 					inset->outSet.insert(*itr);
 					inset->outSrc[*itr] = block;
 				}
+				errs() << "Gen size: " << gen->size() << "\n";
+				errs() << "InSet size: " << inset->outSet.size() << "\n-------------------------\n";
 
 				//errs() << "size: " << predecessors->size() << "\n";
 
@@ -253,8 +268,11 @@ namespace
 								//Add our own terminator condition
 								BranchInst::Create(secondCheckBlock, errorBlock, upperBoundCheck, block);
 
-								nextBlocks.push(followingBlock);
-								pred[followingBlock].insert(block);
+								//nextBlocks.push(followingBlock);
+								nextBlocks.push(secondCheckBlock);
+
+								pred[followingBlock].insert(secondCheckBlock);
+								pred[secondCheckBlock].insert(block);
 								break;
 							}else{		//Static analysis - constant size and index
 								
