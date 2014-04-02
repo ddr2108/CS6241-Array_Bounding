@@ -38,10 +38,10 @@ namespace
 
 		set<Value*>* backwards(Output* output, BasicBlock* block)
 		{
-			errs() << "backwards\n";
 			set<Value*>* S = new set<Value*>();
 
 			set<Value*>* gen = genSet[block];
+			errs() << "backwards: " << gen->size() << "\n";
 
 			//O(n^2) loop to check for matching compares
 			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
@@ -72,17 +72,23 @@ namespace
 
 				//Retrieve genset and pred
 				set<Value*>* gen = genSet[block];
-				set<BasicBlock*> predecessors = pred[block];
+				set<BasicBlock*>* predecessors = &pred[block];
 				Output* outset = outputs[block];
 				Output* inset = inSet[block];
 
-				errs() << "Gen: " << gen->size() << "\n";
+				//errs() << "Gen(" << gen << "): " << gen->size() << "\n";
 
 				if(inset == NULL)
 				{
-					errs() << "Creating inset for block: " << block->getName() << "\n";
+					//errs() << "Creating inset for block: " << block->getName() << "\n";
 					inset = new Output();
 					inSet[block] = inset;
+				}
+				if(outset == NULL)
+				{
+					//errs() << "Creating outset for block: " << block->getName() << "\n";
+					outset = new Output();
+					inSet[block] = outset;
 				}
 
 				//Get successors
@@ -98,7 +104,7 @@ namespace
 					Output* succ = inSet[*itr];
 					if(succ == NULL)
 					{
-						errs() << "ERROR: Null inset found for block: " << (*itr)->getName() << "\n";
+						//errs() << "ERROR: Null inset found for block: " << (*itr)->getName() << "\n";
 						continue;
 					}
 					//Loop through successor values
@@ -129,7 +135,7 @@ namespace
 					}
 				}
 
-				errs() << "Outset size: " << outset->outSet.size() << "\n";
+				//errs() << "Outset size: " << outset->outSet.size() << "\n";
 				set<Value*>* S = backwards(outset, block);
 
 				//Clear sets
@@ -149,11 +155,12 @@ namespace
 					inset->outSrc[*itr] = block;
 				}
 
-				errs() << "size: " << predecessors.size() << "\n";
+				//errs() << "size: " << predecessors->size() << "\n";
 
 				//Add predecessors
-				for(set<BasicBlock*>::iterator itr = predecessors.begin(); itr != predecessors.end(); itr++)
+				for(set<BasicBlock*>::iterator itr = predecessors->begin(); itr != predecessors->end(); itr++)
 				{
+					//errs() << block->getName() << " -> " << (*itr)->getName() << "\n";
 					toVisit.push(*itr);
 				}
 				
@@ -220,8 +227,7 @@ namespace
 
 							if (CI==NULL || CI2==NULL) {		//Runtime analysis
 
-								errs() << "Runtime\n";
-
+								//errs() << "Runtime\n";
 
 								//Create a new exit block
 								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
@@ -236,7 +242,7 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);												
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
 								c_gen->insert(lowerBoundCheck);
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
@@ -248,6 +254,7 @@ namespace
 								BranchInst::Create(secondCheckBlock, errorBlock, upperBoundCheck, block);
 
 								nextBlocks.push(followingBlock);
+								pred[followingBlock].insert(block);
 								break;
 							}else{		//Static analysis - constant size and index
 								
@@ -282,11 +289,10 @@ namespace
 							BasicBlock* term = termInst->getSuccessor(i);
 							nextBlocks.push(term);
 							pred[term].insert(block);
-							errs() << "Adding\n";
 						}
 					}
 				}
-				errs() << genSet.size() << " : " << genSet[block]->size() << "\n";
+				//errs() << genSet.size() << " : " << genSet[block]->size() << " : " << c_gen << "\n";
 
 			}
 
@@ -342,7 +348,7 @@ namespace
 			
 			}
 
-			//calculateSets(lastBlock);
+			calculateSets(lastBlock);
 
 
 			//Print out resulting assembly
