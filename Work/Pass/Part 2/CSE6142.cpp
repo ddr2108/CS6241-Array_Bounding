@@ -41,7 +41,7 @@ namespace
 			set<Value*>* S = new set<Value*>();
 
 			set<Value*>* gen = genSet[block];
-			//errs() << "backwards: " << gen->size() << "\n";
+			//errs() << "backwards: " << output->outSet.size() << "\n";
 
 			//O(n^2) loop to check for matching compares
 			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
@@ -56,9 +56,22 @@ namespace
 
 					errs() << *localInst << " vs " << *inst << "\n";
 
-					if(localInst->getOperand(0) == localInst->getOperand(0))
+					//Oper 0 is what the index is
+					//Oper 1 is the bound we are checking
+
+					//Are we checking the same variable
+					if(localInst->getOperand(0) == inst->getOperand(0))
 					{
-						errs() << "Matching = " << *localInst << "\n";
+						if(localInst->getPredicate() == inst->getPredicate())
+						{
+							if(localInst->getOperand(1) == inst->getOperand(1))
+								errs() << "Matching = " << *localInst << "\n";
+							else
+							{
+								errs() << "Conflict\n";
+								conflict = true;
+							}
+						}
 					}
 				}
 
@@ -69,17 +82,20 @@ namespace
 			return S;
 		}
 
-		void calculateSets(BasicBlock* term)
+		void calculateSets(set<BasicBlock*>* term)
 		{
 			queue<BasicBlock*> toVisit;
-			toVisit.push(term);
+
+			for(set<BasicBlock*>::iterator itr = term->begin(); itr != term->end(); itr++)
+				toVisit.push(*itr);
+			set<BasicBlock*> visited;
 
 			while(!toVisit.empty())
 			{
 				BasicBlock* block = toVisit.front();
 				toVisit.pop();
 
-				errs() << block->getName() << "\n";
+				if(visited.find(block) != visited.end()) continue;
 
 				//Retrieve genset and pred
 				set<Value*>* gen = genSet[block];
@@ -87,7 +103,6 @@ namespace
 				Output* outset = outputs[block];
 				Output* inset = inSet[block];
 
-				//errs() << "Gen(" << gen << "): " << gen->size() << "\n";
 
 				if(inset == NULL)
 				{
@@ -115,20 +130,22 @@ namespace
 				outset->outSrc.clear();
 
 				//Create c_out set
+				bool isReady = true;
 				for(set<BasicBlock*>::iterator itr = successors.begin(); itr != successors.end(); itr++)
 				{
 					Output* succ = inSet[*itr];
 					if(succ == NULL)
 					{
-						errs() << "ERROR(" << block->getName() << "): Null inset found for block: " << (*itr)->getName() << "\n";
-						continue;
+						//errs() << "ERROR(" << block->getName() << "): Null inset found for block: " << (*itr)->getName() << "\n";
+						//continue;
+						isReady = false;
+						break;
 					}
 					//Loop through successor values
 					for(set<Value*>::iterator comp = succ->outSet.begin(); comp != succ->outSet.end(); comp++)
 					{
-						if(true || itr == successors.begin())
+						if(itr == successors.begin())
 						{
-							errs() << "!@#$\n";
 							outset->outSet.insert(*comp);
 							outset->outSrc[*comp] = succ->outSrc[*comp];
 						}
@@ -145,12 +162,18 @@ namespace
 
 							for(set<Value*>::iterator outItr = toRemove.begin(); outItr != toRemove.end(); outItr++)
 							{
-								//outset->outSet.erase(*outItr);
-								//outset->outSrc.erase(*outItr);
+								outset->outSet.erase(*outItr);
+								outset->outSrc.erase(*outItr);
 							}
 						}
 					}
 				}
+				if(!isReady) continue;
+				else visited.insert(block);
+
+				errs() << block->getName() << "\n";
+
+				errs() << "Gen(" << gen << "): " << gen->size() << "\n";
 				errs() << "OutSet size: " << outset->outSet.size() << "\n";
 
 				set<Value*>* S = backwards(outset, block);
@@ -167,9 +190,10 @@ namespace
 					inset->outSet.insert(*itr);
 					inset->outSrc[*itr] = block;
 				}
-				errs() << "Gen size: " << gen->size() << "\n";
+				//errs() << "Gen size: " << gen->size() << "\n";
 				errs() << "InSet size: " << inset->outSet.size() << "\n-------------------------\n";
 
+				//if(predecessors->size() > 1)
 				//errs() << "size: " << predecessors->size() << "\n";
 
 				//Add predecessors
@@ -188,7 +212,9 @@ namespace
 			queue<BasicBlock*> nextBlocks;
 			nextBlocks.push(&F.getEntryBlock());
 
-			BasicBlock* lastBlock;
+			set<BasicBlock*> lastBlock;
+
+			set<BasicBlock*> visited;
 
 			//Visit until nore more blocks left
 			while(!nextBlocks.empty()){
@@ -196,15 +222,18 @@ namespace
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
 
-				lastBlock = block;
-
 				//If already have gone to this block, skip it
 				if(visited.find(block) != visited.end()) continue;
 				visited.insert(block);
 
 				//Gen set
-				set<Value*>* c_gen = new set<Value*>();
-				genSet[block] = c_gen;
+				set<Value*>* c_gen = genSet[block];
+
+				if(c_gen == NULL)
+				{
+					c_gen = new set<Value*>();
+					genSet[block] = c_gen;
+				}
 
 				//Visit the instructions
 				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++){
@@ -257,8 +286,10 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
+								c_gen = new set<Value*>();
+								genSet[secondCheckBlock] = c_gen;
 								c_gen->insert(lowerBoundCheck);
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
 
@@ -271,7 +302,13 @@ namespace
 								//nextBlocks.push(followingBlock);
 								nextBlocks.push(secondCheckBlock);
 
-								pred[followingBlock].insert(secondCheckBlock);
+								//Move all the predecessor links to the head block
+								TerminatorInst* splitTerm = followingBlock->getTerminator();
+								int numSuccessor = splitTerm->getNumSuccessors();
+								for(int i = 0; i < numSuccessor; i++)
+									if(pred[splitTerm->getSuccessor(i)].erase(block) > 0) errs() << "SDFSDF\n";
+
+								//pred[followingBlock].insert(secondCheckBlock);
 								pred[secondCheckBlock].insert(block);
 								break;
 							}else{		//Static analysis - constant size and index
@@ -307,6 +344,12 @@ namespace
 							BasicBlock* term = termInst->getSuccessor(i);
 							nextBlocks.push(term);
 							pred[term].insert(block);
+							//errs() << block->getName() << " -> " << term->getName() << "\n";
+						}
+
+						if(numSucc == 0)
+						{
+							lastBlock.insert(block);
 						}
 					}
 				}
@@ -345,6 +388,7 @@ namespace
 
 							//if exit block only has 1 predecessor
 							if (deleteBlock){
+								lastBlock.erase(errorBlock);
 								errorBlock->eraseFromParent();
 							}
 							
@@ -366,7 +410,7 @@ namespace
 			
 			}
 
-			calculateSets(lastBlock);
+			calculateSets(&lastBlock);
 
 
 			//Print out resulting assembly
