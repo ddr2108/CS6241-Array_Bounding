@@ -28,15 +28,18 @@ namespace {
 		//Run for each function
 		virtual bool runOnFunction(Function &F){
 			
+			//Information about structure of program
 			std::map<BasicBlock*, int> basicBlockIndex;
-			std::map<Instruction*, int> instructionDefIndex;
 			std::map<Instruction*, int> instructionIndex;
+			std::map<Instruction*, int> instructionDefIndex;
 
-			int *dist;	//Hold distance between any two blocks	
-			std::map<BasicBlock*, std::set<int> > killedDef;	
-			std::map<BasicBlock*, std::set<int> > usedDef;	
+			int *dist;						//Hold distance between any two blocks	
+			std::map<BasicBlock*, std::set<int> > killedDef;	//Hold killed def for each block	
+			std::map<BasicBlock*, std::set<int> > usedDef;		//Hold used def for each bock
 
-///////////////////////////////////////////DISTANCE BETWEEN BLOCKS////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			int ind;			
 			int i,j;
 
@@ -47,7 +50,7 @@ namespace {
 			//Go through basic blocks
 			ind = 0;			
 			for (Function::iterator newBlock = allblocks.begin(); newBlock != allblocks.end(); newBlock++) {
-				basicBlockIndex[newBlock] = ind;
+				basicBlockIndex[newBlock] = ind;		//hold information about where the basic block is
 				ind++;
 			}
 
@@ -70,8 +73,6 @@ namespace {
 				for (int k = 0; k < (firstBlock->getTerminator())->getNumSuccessors();k++){
 					successorBlock = (firstBlock->getTerminator())->getSuccessor(k);	//Successor
 					j = basicBlockIndex[successorBlock];
-					
-					errs()<<i<<','<<j<<'\n';
 					dist[i*ind + j] = 1;
 				}
 				i++;
@@ -89,13 +90,13 @@ namespace {
 					}
 				}
 			}
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-		/////////////////////////////////REACHING DEFITION ANALYSIS/////////////////////////////////////////
-int changed;			
-			int changes = 0;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////REACHING DEFINTION ANALYSIS////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			int changed;			
 			int count= -1;
 			int count2 = 0;
-
+struct _
 			//Get loopinfo
   			LoopInfo &LI = getAnalysis<LoopInfo>();
 
@@ -104,26 +105,27 @@ int changed;
 			std::vector<StringRef> def;
 			std::vector<unsigned> lineNum;
 			std::vector<unsigned> realLineNum;
-			std::set<int> instVisited;
+
 			//Put each instruction into list			
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
 				count++;
 				instructionLists.insert(instructionLists.end(), &*i);
-				bbList.insert(bbList.end(), i->getParent()->getName());
-				
+				bbList.insert(bbList.end(), "asd");
+				//instructionIndex[&*i] = 1;
+
 				//Get line number
-				unsigned Line;
+				unsigned int line;
 				MDNode *N = i->getMetadata("dbg");
 				if (N) {
 					DILocation Loc(N);                     
-					 Line = Loc.getLineNumber();
+					line = Loc.getLineNumber();
 				}
 
 				//Store data about variables in list - include line number, variable name, and actual instruction
 				if (i->getOpcode()==28 && N && i->getOperand(1)->getName()!=""){
 					def.insert(def.end(), i->getOperand(1)->getName());
 					lineNum.insert(lineNum.end(), count);
-					realLineNum.insert(realLineNum.end(), Line);
+					realLineNum.insert(realLineNum.end(), line);
 					count2++;
 				}
    			}
@@ -188,7 +190,7 @@ int changed;
 						Instruction* newInstr2 = newBlock2->getFirstNonPHI();
 						for (int y = 0; y<=count;y++){
 							//Find the instruction
-							if(instructionLists[y]==newInstr2 && bbList[y]==newBlock2->getName()){
+							if(instructionLists[y]==newInstr2){
 								for (int j = 0; j<count2;j++){
 									//Copy the reach definitions
 									if (reachDef[p*count2+j] == 1){
@@ -239,39 +241,45 @@ int changed;
 				}
 				
 			}
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////USED DEF///////////////////////////////////////////////////////////////////////
-	/*int l = 0;
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////USED DEF ANALYSIS//////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	int l = 0;
 	for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
 		if (i->getOpcode()==27){		//Is a load instruction
 			std::set<int> defsUsed;
 			for (int d = 0 ;d<count2; d++){	//compare to all the other defs
 				if (reachDef[l*count2 + d] == 1 && def[d]==i->getOperand(0)->getName()){
-				//	defsUsed.insert(d);		//add to used
+					defsUsed.insert(d);		//add to used
 				}
 			}
 			if (defsUsed.size()>1){
-				//std::set<int> currentUsed = usedDef[i->getParent()];
-				//currentUsed.insert(defsUsed.begin(), defsUsed.end());
-				//usedDef[i->getParent()] = currentUsed;
+				std::set<int> currentUsed = usedDef[i->getParent()];
+				currentUsed.insert(defsUsed.begin(), defsUsed.end());
+				usedDef[i->getParent()] = currentUsed;
 			}
 
 		}
 		l++;
-	}*/
+	}
 
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			
+			//Print results
+			for (int z = 0; z<=count;z++){
+				errs()<<*instructionLists[z]<<"\n";
+				for (int y = 0; y<count2; y++){
+					if (reachDef[z*count2+y]==1){
+						errs()<<"-------"<<realLineNum[y]<<"-"<<def[y]<<"\n";
+					}
+				}
+			}
 
-			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
-				errs() <<"\n"<<itr->first->getName();
-				  for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it)
-				    errs() << ' ' << def[*it]<<"-"<<lineNum[*it];
-
-}
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			free(dist);
 			return true;
 
