@@ -1,19 +1,28 @@
 digraph "CFG for 'main' function" {
 	label="CFG for 'main' function";
 
-	Node0x27f63e0 [shape=record,label="{entry:\l  %retval = alloca i32, align 4\l  %d = alloca i32, align 4\l  %z = alloca i32, align 4\l  store i32 0, i32* %retval\l  call void @llvm.dbg.declare(metadata !\{i32* %d\}, metadata !12), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %z\}, metadata !14), !dbg !13\l  store i32 7, i32* %z, align 4, !dbg !15\l  %0 = load i32* %z, align 4, !dbg !16\l  %cmp = icmp sgt i32 %0, 5, !dbg !16\l  br i1 %cmp, label %if.then, label %if.else, !dbg !16\l|{<s0>T|<s1>F}}"];
-	Node0x27f63e0:s0 -> Node0x27f17b0;
-	Node0x27f63e0:s1 -> Node0x27f1810;
-	Node0x27f17b0 [shape=record,label="{if.then:                                          \l  store i32 7, i32* %d, align 4, !dbg !18\l  br label %if.end, !dbg !20\l}"];
-	Node0x27f17b0 -> Node0x27f1870;
-	Node0x27f1810 [shape=record,label="{if.else:                                          \l  store i32 9, i32* %d, align 4, !dbg !21\l  br label %if.end\l}"];
-	Node0x27f1810 -> Node0x27f1870;
-	Node0x27f1870 [shape=record,label="{if.end:                                           \l  %1 = load i32* %z, align 4, !dbg !23\l  %add = add nsw i32 %1, 15, !dbg !23\l  store i32 %add, i32* %z, align 4, !dbg !23\l  %2 = load i32* %z, align 4, !dbg !24\l  %cmp1 = icmp sgt i32 %2, 5, !dbg !24\l  br i1 %cmp1, label %if.then2, label %if.else3, !dbg !24\l|{<s0>T|<s1>F}}"];
-	Node0x27f1870:s0 -> Node0x27f18d0;
-	Node0x27f1870:s1 -> Node0x27f1930;
-	Node0x27f18d0 [shape=record,label="{if.then2:                                         \l  store i32 7, i32* %z, align 4, !dbg !26\l  br label %if.end4, !dbg !28\l}"];
-	Node0x27f18d0 -> Node0x27f1990;
-	Node0x27f1930 [shape=record,label="{if.else3:                                         \l  store i32 9, i32* %z, align 4, !dbg !29\l  br label %if.end4\l}"];
-	Node0x27f1930 -> Node0x27f1990;
-	Node0x27f1990 [shape=record,label="{if.end4:                                          \l  %3 = load i32* %d, align 4, !dbg !31\l  %sub = sub nsw i32 %3, 5, !dbg !31\l  store i32 %sub, i32* %d, align 4, !dbg !31\l  %4 = load i32* %z, align 4, !dbg !32\l  %sub5 = sub nsw i32 %4, 5, !dbg !32\l  store i32 %sub5, i32* %z, align 4, !dbg !32\l  %5 = load i32* %retval, !dbg !33\l  ret i32 %5, !dbg !33\l}"];
+	Node0x2d583e0 [shape=record,label="{entry:\l  %retval = alloca i32, align 4\l  %d = alloca i32, align 4\l  %z = alloca i32, align 4\l  store i32 0, i32* %retval\l  call void @llvm.dbg.declare(metadata !\{i32* %d\}, metadata !12), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %z\}, metadata !14), !dbg !13\l  store i32 7, i32* %z, align 4, !dbg !15\l  %0 = load i32* %z, align 4, !dbg !16\l  %cmp = icmp sgt i32 %0, 5, !dbg !16\l  br i1 %cmp, label %if.then, label %if.else, !dbg !16\l|{<s0>T|<s1>F}}"];
+	Node0x2d583e0:s0 -> Node0x2d537b0;
+	Node0x2d583e0:s1 -> Node0x2d53810;
+	Node0x2d537b0 [shape=record,label="{if.then:                                          \l  store i32 7, i32* %d, align 4, !dbg !18\l  br label %if.end, !dbg !20\l}"];
+	Node0x2d537b0 -> Node0x2d53870;
+	Node0x2d53810 [shape=record,label="{if.else:                                          \l  store i32 9, i32* %d, align 4, !dbg !21\l  br label %if.end\l}"];
+	Node0x2d53810 -> Node0x2d53870;
+	Node0x2d53870 [shape=record,label="{if.end:                                           \l  %1 = load i32* %z, align 4, !dbg !23\l  %add = add nsw i32 %1, 15, !dbg !23\l  store i32 %add, i32* %z, align 4, !dbg !23\l  %2 = load i32* %z, align 4, !dbg !24\l  %cmp1 = icmp sgt i32 %2, 5, !dbg !24\l  br i1 %cmp1, label %if.then2, label %if.else3, !dbg !24\l|{<s0>T|<s1>F}}"];
+	Node0x2d53870:s0 -> Node0x2d538d0;
+	Node0x2d53870:s1 -> Node0x2d53930;
+	Node0x2d538d0 [shape=record,label="{if.then2:                                         \l  store i32 7, i32* %z, align 4, !dbg !26\l  br label %if.end4, !dbg !28\l}"];
+	Node0x2d538d0 -> Node0x2d53990;
+	Node0x2d53930 [shape=record,label="{if.else3:                                         \l  store i32 9, i32* %z, align 4, !dbg !29\l  br label %if.end4\l}"];
+	Node0x2d53930 -> Node0x2d53990;
+	Node0x2d53990 [shape=record,label="{if.end4:                                          \l  %3 = load i32* %d, align 4, !dbg !31\l  %sub = sub nsw i32 %3, 5, !dbg !31\l  store i32 %sub, i32* %d, align 4, !dbg !31\l  %4 = load i32* %z, align 4, !dbg !32\l  %sub5 = sub nsw i32 %4, 5, !dbg !32\l  store i32 %sub5, i32* %z, align 4, !dbg !32\l  %5 = load i32* %retval, !dbg !33\l  ret i32 %5, !dbg !33\l}"];
+	Node0x2d78dc0 [shape=record,label="{if.endclone:                                      \l  %6 = load i32* %z, align 4, !dbg !23\l  %addclone = add nsw i32 %1, 15, !dbg !23\l  store i32 %add, i32* %z, align 4, !dbg !23\l  %7 = load i32* %z, align 4, !dbg !24\l  %cmp1clone = icmp sgt i32 %2, 5, !dbg !24\l  br i1 %cmp1, label %if.then2, label %if.else3, !dbg !24\l|{<s0>T|<s1>F}}"];
+	Node0x2d78dc0:s0 -> Node0x2d538d0;
+	Node0x2d78dc0:s1 -> Node0x2d53930;
+	Node0x2d79180 [shape=record,label="{if.then2clone:                                    \l  store i32 7, i32* %z, align 4, !dbg !26\l  br label %if.end4, !dbg !28\l}"];
+	Node0x2d79180 -> Node0x2d53990;
+	Node0x2d79320 [shape=record,label="{if.else3clone:                                    \l  store i32 9, i32* %z, align 4, !dbg !29\l  br label %if.end4\l}"];
+	Node0x2d79320 -> Node0x2d53990;
+	Node0x2d794c0 [shape=record,label="{if.end4clone:                                     \l  %8 = load i32* %d, align 4, !dbg !31\l  %subclone = sub nsw i32 %3, 5, !dbg !31\l  store i32 %sub, i32* %d, align 4, !dbg !31\l  %9 = load i32* %z, align 4, !dbg !32\l  %sub5clone = sub nsw i32 %4, 5, !dbg !32\l  store i32 %sub5, i32* %z, align 4, !dbg !32\l  %10 = load i32* %retval, !dbg !33\l  ret i32 %5, !dbg !33\l}"];
+	Node0x2d799f0 [shape=record,label="{if.end4clone1:                                    \l  %11 = load i32* %d, align 4, !dbg !31\l  %subclone2 = sub nsw i32 %3, 5, !dbg !31\l  store i32 %sub, i32* %d, align 4, !dbg !31\l  %12 = load i32* %z, align 4, !dbg !32\l  %sub5clone3 = sub nsw i32 %4, 5, !dbg !32\l  store i32 %sub5, i32* %z, align 4, !dbg !32\l  %13 = load i32* %retval, !dbg !33\l  ret i32 %5, !dbg !33\l}"];
 }

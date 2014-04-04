@@ -53,6 +53,7 @@ namespace {
 			std::map<BasicBlock*, std::set<int> > usedDef;		//Hold used def for each bock
 			std::map<BasicBlock*, std::set<BasicBlock*> > influencedNode;		//Hold used dbock
 			std::set<std::set<BasicBlock*> > ROI;		//Hold used def for each bock
+			std::map<std::set<BasicBlock*> *, std::set<BasicBlock*> > cloned;		//Hold used dbock
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -267,7 +268,6 @@ namespace {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////USED DEF ANALYSIS//////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 			int curInstIndex = 0;
 			//Go through each instruction
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
@@ -290,21 +290,110 @@ namespace {
 				}
 				curInstIndex++;
 			}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////INFLUENCED NODE//////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			//Go through each block
+			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++){	
+				//if it has mutliple defs that it killed
+				if (killedDef[i].size() > 0){
+					//Go through each block and look for a path
+					for (Function::iterator j = allblocks.begin(); j != allblocks.end(); j++){
+						//Get indexes for block
+						int sourceBlock = basicBlockIndex[i];
+						int destBlock = basicBlockIndex[j];
+
+						if (usedDef[j].size() > 0){
+							//If they are different blocks and one source reaches dest or the same block
+							if ((dist[sourceBlock*numBlock + destBlock]>0 && dist[sourceBlock*numBlock + destBlock]<1000000000) || sourceBlock==destBlock){
+								//Go through the killed defs for source block
+								for (std::set<int>::const_iterator k = killedDef[i].begin(); k != killedDef[i].end(); ++k){
+									int killed = *k;
+					
+									//GO through used defs for dest blocks
+									for (std::set<int>::const_iterator m = usedDef[j].begin(); m != usedDef[j].end(); ++m){
+										int used = *m;
+
+										//if there is an interesection between killed and used, dest is influenced
+										if (used==killed){
+											std::set<BasicBlock*> influencedBlocks = influencedNode[i];
+											influencedBlocks.insert(j);
+											influencedNode[i] = influencedBlocks;
+										}
+									}
+								}
+							}
+						}		
+					}
+				}
+			}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////ROI//////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			//Go through all blocks
+			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++){
+				int sourceBlock = basicBlockIndex[i];	//Initial block
+	
+				//GO through influenced blocks for each blocks
+				for (std::set<BasicBlock*>::const_iterator j = influencedNode[i].begin(); j != influencedNode[i].end(); ++j){ 
+					int endBlock = basicBlockIndex[*j]; 	//last block
+
+					std::set<BasicBlock*> curROI;
+					//Go through all the blocks and set as an intermediate block
+					for (Function::iterator k = allblocks.begin(); k != allblocks.end(); k++){	
+						int intermediateBlock = basicBlockIndex[k];
+
+						//if source reaches intermediate, and intermediate reaches dest, then in ROI
+						if ((dist[sourceBlock*numBlock+intermediateBlock]>0 && dist[sourceBlock*numBlock+intermediateBlock]<1000000000)|| sourceBlock==intermediateBlock){ 
+							if ((dist[intermediateBlock*numBlock+endBlock]>0 && dist[intermediateBlock*numBlock+endBlock]<1000000000)|| endBlock==intermediateBlock){
+								curROI.insert(k);	
+							}
+						}	
+					}
+
+					//Insert into list of ROI
+					ROI.insert(curROI);
+				}
+			}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////REPLICATING//////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+			//Go through all the ROI sets			
+			for (std::set<std::set<BasicBlock*> >::iterator i = ROI.begin(); i != ROI.end(); ++i){
+				
+				//Go through a specific set of ROI blocks
+				for (std::set<BasicBlock*>::iterator j=i->begin(); j!=i->end(); ++j){
+					BasicBlock *cloneBB = BasicBlock::Create((*j)->getContext(), Twine((*j)->getName() + "clone"), &F);
+
+					//Go through instructions for each block
+					for (BasicBlock::const_iterator k = (*j)->begin(); k!=(*j)->end(); ++k) {
+						//clone instruction     
+						Instruction *cloneInst = k->clone();
+						if (k->hasName()){
+							cloneInst->setName(k->getName()+"clone");
+						}
+						cloneBB->getInstList().push_back(cloneInst);
+
+					}
+
+				}
+			}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			
+/*			
 			//Print reaching def results
-			/*for (int z = 0; z<numInst;z++){
+			for (int z = 0; z<numInst;z++){
 				errs()<<*instructionLists[z]<<"\n";
 				for (int y = 0; y<numDef; y++){
 					if (reachDef[z*numDef+y] > 0){
-						errs()<<"-------"<<instructionDefIndex[y]->lineNum<<"-"<<reachDef[z*numDef+y]<<"-"<<instructionDefIndex[y]->def<<"\n";
+						errs()<<"-------"<<instructionDefIndex[y]->lineNum<<"-"<<instructionDefIndex[y]->def<<"\n";
 					}
 				}
-			}*/
-
+			}
+*/
+/*
 			//Print Killed def
 			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = killedDef.begin(); itr != killedDef.end(); ++itr){
 				errs() <<"\n"<<itr->first->getName();
@@ -313,13 +402,34 @@ namespace {
 				}
 			}
 
+*/
+/*
 			//Print Used def
-			/*for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
+			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
 				errs() <<"\n"<<itr->first->getName();
 				for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
 					errs() << ' ' << instructionDefIndex[*it]->def<<"-"<<instructionDefIndex[*it]->lineNum;
 				}
-			}*/
+			}
+*/
+/*
+			//Print Influenced def
+			for (std::map<BasicBlock*, std::set<BasicBlock*> >::const_iterator itr = influencedNode.begin(); itr != influencedNode.end(); ++itr){
+				errs() <<"\n"<<itr->first->getName();
+				for (std::set<BasicBlock*>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
+					errs() <<" "<<(*it)->getName();
+				}
+			}
+*/
+/*
+			//Print ROI
+			for (std::set<std::set<BasicBlock*> >::const_iterator itr = ROI.begin(); itr != ROI.end(); ++itr){
+				errs() <<"\n";
+				for (std::set<BasicBlock*>::iterator it=itr->begin(); it!=itr->end(); ++it){
+					errs() <<" "<<(*it)->getName();
+				}
+			}
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			free(dist);
