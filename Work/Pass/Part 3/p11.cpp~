@@ -20,6 +20,20 @@ using std::queue;
 
 namespace {
 	
+	//Structure for holding information about instructions
+	typedef struct _defInstruct{
+		StringRef def;		//the variable modified
+		int instructNum;	//the nth instruction in program
+		int lineNum;		//actual line number
+
+		//Constructor
+		 _defInstruct(StringRef defIn, int instructNumIn, int lineNumIn){
+			def = defIn;
+			instructNum = instructNumIn;
+			lineNum = lineNumIn;
+		}
+	} defInstruct;
+
 	struct p11 : public FunctionPass {
 		// Pass identification, replacement for typeid
 		static char ID; 
@@ -31,60 +45,61 @@ namespace {
 			//Information about structure of program
 			std::map<BasicBlock*, int> basicBlockIndex;
 			std::map<Instruction*, int> instructionIndex;
-			std::map<Instruction*, int> instructionDefIndex;
+			std::map<int, defInstruct*> instructionDefIndex;
 
-			int *dist;						//Hold distance between any two blocks	
+			int *dist;						//Hold distance between any two blocks
+			int* reachDef;						//Hold reaching def for each instruction
 			std::map<BasicBlock*, std::set<int> > killedDef;	//Hold killed def for each block	
 			std::map<BasicBlock*, std::set<int> > usedDef;		//Hold used def for each bock
-
+			std::map<BasicBlock*, std::set<BasicBlock*> > influencedNode;		//Hold used dbock
+			std::set<std::set<BasicBlock*> > ROI;		//Hold used def for each bock
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			int ind;			
-			int i,j;
-
-			BasicBlock* successorBlock;
+			int numBlock = 0;	//Number of blocks
 
 			//Get list of basic blocks			
 			Function::BasicBlockListType &allblocks = F.getBasicBlockList();
 			//Go through basic blocks
-			ind = 0;			
-			for (Function::iterator newBlock = allblocks.begin(); newBlock != allblocks.end(); newBlock++) {
-				basicBlockIndex[newBlock] = ind;		//hold information about where the basic block is
-				ind++;
+			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++) {
+				basicBlockIndex[i] = numBlock++;		//hold information about where the basic block is
 			}
 
 			//Allocate array
-			dist = (int*) malloc(ind*ind*sizeof(int*));
-			for (i = 0; i<ind; i++){
+			dist = (int*) malloc(numBlock*numBlock*sizeof(int*));
+			for (int i = 0; i<numBlock; i++){
 				//Init to infinite
-				for(j =0; j<ind; j++){
+				for(int j =0; j<numBlock; j++){
 					if (i==j){
-						dist[i*ind + j] = 0;
+						dist[i*numBlock + j] = 0;
 					}else{
-						dist[i*ind + j] = 1000000000;
+						dist[i*numBlock + j] = 1000000000;
 					}
 				}
 			}
 
 			//Fill array will all with distance 1;
-			i = 0;
-			for (Function::const_iterator firstBlock = allblocks.begin(); firstBlock != allblocks.end(); firstBlock++) {
-				for (int k = 0; k < (firstBlock->getTerminator())->getNumSuccessors();k++){
-					successorBlock = (firstBlock->getTerminator())->getSuccessor(k);	//Successor
-					j = basicBlockIndex[successorBlock];
-					dist[i*ind + j] = 1;
+			BasicBlock* successorBlock;	//Next basic block
+			//Block indexes
+			int sourceBlock = 0;
+			int destinationBlock;
+			for (Function::const_iterator i = allblocks.begin(); i != allblocks.end(); i++) {
+				//For each successor
+				for (int j = 0; j < (i->getTerminator())->getNumSuccessors();j++){
+					successorBlock = (i->getTerminator())->getSuccessor(j);	//Successor
+					destinationBlock = basicBlockIndex[successorBlock];
+					dist[sourceBlock*numBlock + destinationBlock] = 1;			//Set distance to 1
 				}
-				i++;
+				sourceBlock++;
 			}
 
 			//Perform the algorithm
-			for (int x = 0; x<ind ;x++){
-				for (int y = 0; y<ind ;y++){
-					for (int z = 0; z<ind ;z++){
-						if (y!=z){
-							if (dist[y*ind + z] > (dist[y*ind + x] + dist[x*ind + z])){ 
-								dist[y*ind + z] = dist[y*ind + x] + dist[x*ind + z];
+			for (int i = 0; i<numBlock ;i++){
+				for (int j = 0; j<numBlock ;j++){
+					for (int k = 0; k<numBlock ;k++){
+						if (j!=k){
+							if (dist[j*numBlock + k] > (dist[j*numBlock + i] + dist[i*numBlock + k])){ 
+								dist[j*numBlock + k] = dist[j*numBlock + i] + dist[i*numBlock + k];
 							}
 						}
 					}
@@ -93,25 +108,17 @@ namespace {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////REACHING DEFINTION ANALYSIS////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			int changed;			
-			int count= -1;
-			int count2 = 0;
-struct _
+			int numInst = 0;		//number of instructions
+			int numDef = 0;			//number of defs
+
 			//Get loopinfo
   			LoopInfo &LI = getAnalysis<LoopInfo>();
 
-			std::vector<Instruction*> instructionLists;
-			std::vector<StringRef> bbList;
-			std::vector<StringRef> def;
-			std::vector<unsigned> lineNum;
-			std::vector<unsigned> realLineNum;
+			std::vector<Instruction*> instructionLists;	//List of instructions
 
 			//Put each instruction into list			
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
-				count++;
 				instructionLists.insert(instructionLists.end(), &*i);
-				bbList.insert(bbList.end(), "asd");
-				//instructionIndex[&*i] = 1;
 
 				//Get line number
 				unsigned int line;
@@ -121,66 +128,69 @@ struct _
 					line = Loc.getLineNumber();
 				}
 
-				//Store data about variables in list - include line number, variable name, and actual instruction
+				//Store data about variables in list - include line number, variable name, and actual instr
 				if (i->getOpcode()==28 && N && i->getOperand(1)->getName()!=""){
-					def.insert(def.end(), i->getOperand(1)->getName());
-					lineNum.insert(lineNum.end(), count);
-					realLineNum.insert(realLineNum.end(), line);
-					count2++;
+					//Insert information about instruction
+					defInstruct* newInstruction = new defInstruct(i->getOperand(1)->getName(), numInst, line);
+					instructionDefIndex[numDef++] = newInstruction;
 				}
-   			}
-			
-			//2d array to hold reaching def
-			int* reachDef = (int*)calloc((count+1)*count2,sizeof(int));
-			
-			int prevK = 0;
-			int k=0;
-			int p = 0;
-			//go through each instruction
-			for(p = 0;p<=count;p++){
-				Instruction* i = instructionLists[p];
-				prevK = k;
 				
-				//Get Line num
-				for (k = 0; k<count2;k++){
-					if(lineNum[k]>p){
-						k--;
+				//Store index number of instruction
+				instructionIndex[&*i] = numInst++;
+   			}
+
+			//Allocate 2d array to hold reaching def
+			reachDef = (int*)calloc((numInst)*numDef,sizeof(int));
+			
+			//Hold defentions that are being studied
+			int prevDef = 0;
+			int curDef = 0;
+			//go through each instruction and fix successor reaching defs
+			for(int i = 0; i < numInst; i++){
+				//Instruction being studied
+				Instruction* curInst = instructionLists[i];
+				prevDef = curDef;
+				
+				//Get which defs this instruction added
+				for (curDef = 0; curDef < numDef; curDef++){
+					//compare def to the instruction being studied
+					if(instructionDefIndex[curDef]->instructNum > i){
+						curDef--;
 						break;
 					}
 				}
 
 				//copy prev instruction if not first instr in block
-				if (p>0 && (i->getParent()->getFirstNonPHI()!=i)){
+				if (i > 0 && (curInst->getParent()->getFirstNonPHI()!=curInst)){
 					//Copy previous reach def
-					for (int j = 0; j<count2;j++){
-						if (reachDef[(p-1)*count2+j] == 1){
-							reachDef[p*count2+j] = reachDef[(p-1)*count2+j]; 
+					for (int j = 0; j < numDef; j++){
+						//if it is marked as reaching, mark it as reaching in next
+						if (reachDef[(i-1)*numDef+j] > 0){
+							reachDef[i*numDef+j] = reachDef[(i-1)*numDef+j]; 
+						}
+					}
+				}
+				
+				//Add new defitions reachable because of new isntruction
+				for (int j = prevDef+1; j <= curDef && j < numDef; j++){
+					reachDef[i*numDef+j] = 1;		//mark instruction as reaching
+					//Check if need to get rid of def
+					for (int k = 0; k < numDef; k++){
+						//if instruction  is marked as reaching and not the same instruction
+						if (reachDef[i*numDef+k]==1 && instructionDefIndex[k]->instructNum!=i){
+							//if the instructions are for the same variable, mark the others so
+							if(instructionDefIndex[j]->def == instructionDefIndex[k]->def){
+								reachDef[i*numDef+k]=0;
+							}
 						}
 					}
 				}
 
-				
-				//Add new defitions reachable because of new isntruction
-				for (int m = prevK+1; m<=k;m++){
-
-					//if(reachDef[p*count2+m]==0){
-						reachDef[p*count2+m]=1;
-						//Check if need to get rid of def
-						for (int z = count2; z>=0;z--){
-							if (reachDef[p*count2+z]==1 && lineNum[z]!=p){
-
-								if(def[m].equals_lower(def[z])){
-									reachDef[p*count2+z]=0;
-								}
-							}
-						}
-					//}
-				}
-
-				int change = 0;
+				int changedFlag = 0;	//Flag to hold whether any changes where made
+				int killedFlag = 0;	//Flag to hold whether a def was killed
 
 				//Call Test
-				Instruction* newInstr = instructionLists[p];
+				Instruction* newInstr = instructionLists[i];
 				BasicBlock *newBlock = newInstr->getParent();
 				//If  it is a terminating instruction and is doing a call
 				if (newInstr->isTerminator() && (((newBlock->getTerminator())->getNumSuccessors()>1)||newInstr->getOpcode()==2)){
@@ -188,93 +198,96 @@ struct _
 						//Get the destination of the call
 						BasicBlock* newBlock2 = newBlock->getTerminator()->getSuccessor(x);
 						Instruction* newInstr2 = newBlock2->getFirstNonPHI();
-						for (int y = 0; y<=count;y++){
-							//Find the instruction
-							if(instructionLists[y]==newInstr2){
-								for (int j = 0; j<count2;j++){
-									//Copy the reach definitions
-									if (reachDef[p*count2+j] == 1){
-										if (reachDef[y*count2+j]!=1){ 
-											reachDef[y*count2+j]= reachDef[p*count2+j]; 
-											change = 1;		//mark if there was a change
-										     //Find the def
-										     int killedFlag = 0;
-										     //check for killed def
-										     for (int d = 0;d<count2;d++){
-//errs()<<"asd\n";
-										          if (d!=j && def[d]==def[j] && reachDef[y*count2+d]==1){
 
-										               killedFlag = 1;
-										               std::set<int> currentKill = killedDef[newBlock2];
-										               currentKill.insert(d);
-										               killedDef[newBlock2] = currentKill;
-										          }
-										     }
-										     //if there is a def killed, add initial
-										     if (killedFlag){
-										          std::set<int> currentKill = killedDef[newBlock2];
-										          currentKill.insert(j);
-										          killedDef[newBlock2] = currentKill;
-										     }
+						//Get index of the instruction
+						int y = instructionIndex[newInstr2];
 
-											}
-									}
-								}
-								//If there was a change restart analysis earlier - add to procset
-								if (change==1){
-									if (p>y){
-										p = y;
-									}
+						for (int j = 0; j<numDef;j++){
+							//Copy the reach definitions
+							if (reachDef[i*numDef+j] > 0){
+								if (reachDef[y*numDef+j] < 1){ 
+									changedFlag = 1;	//mark  there was a change
+									//Copy def
+									reachDef[y*numDef+j] = reachDef[i*numDef+j]; 
+								     
+								     	//check for killed def
+									for (int d = 0; d < numDef;d++){
+										//if a diff def for same variable, and both reach
+										if (d!=j && instructionDefIndex[d]->def==instructionDefIndex[j]->def && reachDef[y*numDef+d]>0){
+											killedFlag = 1;		//mark as killed
 
-									//Get Line num
-									for (k = 0; k<count2;k++){
-										if(lineNum[k]>p){
-											k--;
-											break;
-										}
+											//add the existing to killed set
+										       	std::set<int> currentKill = killedDef[newBlock2];
+										       	currentKill.insert(d);
+										      	killedDef[newBlock2] = currentKill;
+										  }
 									}
-									break;
+								     
+									//if there is a def killed, add the intial that triggered 
+								     	if (killedFlag){
+								          	std::set<int> currentKill = killedDef[newBlock2];
+								         	currentKill.insert(j);
+								          	killedDef[newBlock2] = currentKill;
+								     	}
 								}
 							}
 						}
+
+						//If there was a change restart analysis earlier - add to procset
+						if (changedFlag){
+							//if modified an earlier instruction, go back
+							if (i>y){
+								i = y;
+							}
+
+							//Modify def analysis based on moving back
+							for (curDef = 0; curDef < numDef; curDef++){
+								if(instructionDefIndex[curDef]->instructNum > i){
+									curDef--;
+									break;
+								}
+							}
+
+							//go back to new successor block
+							break;
+						}
+
 					}
 				}
-				
 			}
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////USED DEF ANALYSIS//////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	int l = 0;
-	for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
-		if (i->getOpcode()==27){		//Is a load instruction
-			std::set<int> defsUsed;
-			for (int d = 0 ;d<count2; d++){	//compare to all the other defs
-				if (reachDef[l*count2 + d] == 1 && def[d]==i->getOperand(0)->getName()){
-					defsUsed.insert(d);		//add to used
-				}
-			}
-			if (defsUsed.size()>1){
-				std::set<int> currentUsed = usedDef[i->getParent()];
-				currentUsed.insert(defsUsed.begin(), defsUsed.end());
-				usedDef[i->getParent()] = currentUsed;
-			}
+			int curInst = 0;
+			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
+				if (i->getOpcode()==27){		//Is a load instruction
+					std::set<int> defsUsed;
+					for (int d = 0 ;d<numDef; d++){	//compare to all the other defs
+						if (reachDef[curInst*numDef + d] == 1 && instructionDefIndex[d]->def == i->getOperand(0)->getName()){
+							defsUsed.insert(d);		//add to used
+						}
+					}
+					if (defsUsed.size()>1){
+						std::set<int> currentUsed = usedDef[i->getParent()];
+						currentUsed.insert(defsUsed.begin(), defsUsed.end());
+						usedDef[i->getParent()] = currentUsed;
+					}
 
-		}
-		l++;
-	}
+				}
+				curInst++;
+			}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			
 			//Print results
-			for (int z = 0; z<=count;z++){
+			for (int z = 0; z<numInst;z++){
 				errs()<<*instructionLists[z]<<"\n";
-				for (int y = 0; y<count2; y++){
-					if (reachDef[z*count2+y]==1){
-						errs()<<"-------"<<realLineNum[y]<<"-"<<def[y]<<"\n";
+				for (int y = 0; y<numDef; y++){
+					if (reachDef[z*numDef+y]==1){
+						errs()<<"-------"<<instructionDefIndex[y]->lineNum<<"-"<<instructionDefIndex[y]->def<<"\n";
 					}
 				}
 			}
