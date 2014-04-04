@@ -131,8 +131,8 @@ namespace {
 				//Store data about variables in list - include line number, variable name, and actual instr
 				if (i->getOpcode()==28 && N && i->getOperand(1)->getName()!=""){
 					//Insert information about instruction
-					defInstruct* newInstruction = new defInstruct(i->getOperand(1)->getName(), numInst, line);
-					instructionDefIndex[numDef++] = newInstruction;
+					defInstruct* curInstuction = new defInstruct(i->getOperand(1)->getName(), numInst, line);
+					instructionDefIndex[numDef++] = curInstuction;
 				}
 				
 				//Store index number of instruction
@@ -147,9 +147,9 @@ namespace {
 			int curDef = 0;
 			//go through each instruction and fix successor reaching defs
 			for(int i = 0; i < numInst; i++){
-				//Instruction being studied
-				Instruction* curInst = instructionLists[i];
-				prevDef = curDef;
+				Instruction* curInst = instructionLists[i];	//Instruction being studied
+				BasicBlock *curBlock = curInst->getParent();	//block with current instruction
+				prevDef = curDef;				//defs being studied
 				
 				//Get which defs this instruction added
 				for (curDef = 0; curDef < numDef; curDef++){
@@ -173,14 +173,14 @@ namespace {
 				
 				//Add new defitions reachable because of new isntruction
 				for (int j = prevDef+1; j <= curDef && j < numDef; j++){
-					reachDef[i*numDef+j] = 1;		//mark instruction as reaching
+					reachDef[i*numDef+j] = basicBlockIndex[curBlock] + 1;		//mark instruction as reaching
 					//Check if need to get rid of def
 					for (int k = 0; k < numDef; k++){
 						//if instruction  is marked as reaching and not the same instruction
-						if (reachDef[i*numDef+k]==1 && instructionDefIndex[k]->instructNum!=i){
+						if (reachDef[i*numDef+k] > 0 && instructionDefIndex[k]->instructNum!=i){
 							//if the instructions are for the same variable, mark the others so
 							if(instructionDefIndex[j]->def == instructionDefIndex[k]->def){
-								reachDef[i*numDef+k]=0;
+								reachDef[i*numDef+k] = 0;
 							}
 						}
 					}
@@ -189,45 +189,50 @@ namespace {
 				int changedFlag = 0;	//Flag to hold whether any changes where made
 				int killedFlag = 0;	//Flag to hold whether a def was killed
 
-				//Call Test
-				Instruction* newInstr = instructionLists[i];
-				BasicBlock *newBlock = newInstr->getParent();
 				//If  it is a terminating instruction and is doing a call
-				if (newInstr->isTerminator() && (((newBlock->getTerminator())->getNumSuccessors()>1)||newInstr->getOpcode()==2)){
-					for (int x = 0; x<newBlock->getTerminator()->getNumSuccessors(); x++){
+				if (curInst->isTerminator() && (((curBlock->getTerminator())->getNumSuccessors()>1)||curInst->getOpcode()==2)){
+					for (int j = 0; j<curBlock->getTerminator()->getNumSuccessors(); j++){
 						//Get the destination of the call
-						BasicBlock* newBlock2 = newBlock->getTerminator()->getSuccessor(x);
-						Instruction* newInstr2 = newBlock2->getFirstNonPHI();
+						BasicBlock* nextBlock = curBlock->getTerminator()->getSuccessor(j);
+						Instruction* nextInst = nextBlock->getFirstNonPHI();
 
 						//Get index of the instruction
-						int y = instructionIndex[newInstr2];
+						int nextInstIndex = instructionIndex[nextInst];
 
-						for (int j = 0; j<numDef;j++){
+						for (int k = 0; k<numDef; k++){
 							//Copy the reach definitions
-							if (reachDef[i*numDef+j] > 0){
-								if (reachDef[y*numDef+j] < 1){ 
+							if (reachDef[i*numDef+k] > 0){
+								if (reachDef[nextInstIndex*numDef+k] < 1){ 
 									changedFlag = 1;	//mark  there was a change
 									//Copy def
-									reachDef[y*numDef+j] = reachDef[i*numDef+j]; 
+									reachDef[nextInstIndex*numDef+k] = basicBlockIndex[curBlock] + 1; 
 								     
+									std::set<int> newKill;	//set of defs killed
+
 								     	//check for killed def
 									for (int d = 0; d < numDef;d++){
 										//if a diff def for same variable, and both reach
-										if (d!=j && instructionDefIndex[d]->def==instructionDefIndex[j]->def && reachDef[y*numDef+d]>0){
-											killedFlag = 1;		//mark as killed
+										if (d!=k && instructionDefIndex[d]->def==instructionDefIndex[k]->def && reachDef[nextInstIndex*numDef+d]>0){
+											//if they are from diff blocks, then it is killed
+											if (reachDef[nextInstIndex*numDef+d] != reachDef[nextInstIndex*numDef+k]){
+												killedFlag = 1;
+											}
 
-											//add the existing to killed set
-										       	std::set<int> currentKill = killedDef[newBlock2];
-										       	currentKill.insert(d);
-										      	killedDef[newBlock2] = currentKill;
+										       	newKill.insert(d);	//insert it as newly killed
 										  }
 									}
 								     
 									//if there is a def killed, add the intial that triggered 
 								     	if (killedFlag){
-								          	std::set<int> currentKill = killedDef[newBlock2];
-								         	currentKill.insert(j);
-								          	killedDef[newBlock2] = currentKill;
+										killedFlag = 0;		//reset flag
+
+								          	std::set<int> currentKill = killedDef[nextBlock];	//get set
+										
+										//Add newly killed
+								         	currentKill.insert(k);
+										currentKill.insert(newKill.begin(), newKill.end());
+								          	
+										killedDef[nextBlock] = currentKill;			//Add back
 								     	}
 								}
 							}
@@ -235,9 +240,11 @@ namespace {
 
 						//If there was a change restart analysis earlier - add to procset
 						if (changedFlag){
+							changedFlag = 0;	//reset flag
+
 							//if modified an earlier instruction, go back
-							if (i>y){
-								i = y;
+							if (i>nextInstIndex){
+								i = nextInstIndex;
 							}
 
 							//Modify def analysis based on moving back
@@ -248,8 +255,10 @@ namespace {
 								}
 							}
 
-							//go back to new successor block
-							break;
+							//go back to new successor block if backwards
+							if (i>nextInstIndex){
+								break;
+							}
 						}
 
 					}
@@ -259,15 +268,19 @@ namespace {
 //////////////////////////////////////////USED DEF ANALYSIS//////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-			int curInst = 0;
+			int curInstIndex = 0;
+			//Go through each instruction
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
 				if (i->getOpcode()==27){		//Is a load instruction
 					std::set<int> defsUsed;
-					for (int d = 0 ;d<numDef; d++){	//compare to all the other defs
-						if (reachDef[curInst*numDef + d] == 1 && instructionDefIndex[d]->def == i->getOperand(0)->getName()){
+					//Go throuch reaching defs
+					for (int d = 0 ;d<numDef; d++){
+						//if the variable used has multiple reachinf defs, insert them
+						if (reachDef[curInstIndex*numDef + d] > 0 && instructionDefIndex[d]->def == i->getOperand(0)->getName()){
 							defsUsed.insert(d);		//add to used
 						}
 					}
+					//if there are mutliple reach defs, then add to used defs list
 					if (defsUsed.size()>1){
 						std::set<int> currentUsed = usedDef[i->getParent()];
 						currentUsed.insert(defsUsed.begin(), defsUsed.end());
@@ -275,22 +288,38 @@ namespace {
 					}
 
 				}
-				curInst++;
+				curInstIndex++;
 			}
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			
-			//Print results
-			for (int z = 0; z<numInst;z++){
+			//Print reaching def results
+			/*for (int z = 0; z<numInst;z++){
 				errs()<<*instructionLists[z]<<"\n";
 				for (int y = 0; y<numDef; y++){
-					if (reachDef[z*numDef+y]==1){
-						errs()<<"-------"<<instructionDefIndex[y]->lineNum<<"-"<<instructionDefIndex[y]->def<<"\n";
+					if (reachDef[z*numDef+y] > 0){
+						errs()<<"-------"<<instructionDefIndex[y]->lineNum<<"-"<<reachDef[z*numDef+y]<<"-"<<instructionDefIndex[y]->def<<"\n";
 					}
 				}
+			}*/
+
+			//Print Killed def
+			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = killedDef.begin(); itr != killedDef.end(); ++itr){
+				errs() <<"\n"<<itr->first->getName();
+				for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
+				   	errs() << ' ' << instructionDefIndex[*it]->def<<"-"<<instructionDefIndex[*it]->lineNum;
+				}
 			}
+
+			//Print Used def
+			/*for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
+				errs() <<"\n"<<itr->first->getName();
+				for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
+					errs() << ' ' << instructionDefIndex[*it]->def<<"-"<<instructionDefIndex[*it]->lineNum;
+				}
+			}*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			free(dist);
