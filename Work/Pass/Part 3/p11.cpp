@@ -52,8 +52,9 @@ namespace {
 			std::map<BasicBlock*, std::set<int> > killedDef;	//Hold killed def for each block	
 			std::map<BasicBlock*, std::set<int> > usedDef;		//Hold used def for each bock
 			std::map<BasicBlock*, std::set<BasicBlock*> > influencedNode;		//Hold used dbock
-			std::set<std::set<BasicBlock*> > ROI;		//Hold used def for each bock
-			std::map<std::set<BasicBlock*> *, std::set<BasicBlock*> > cloned;		//Hold used dbock
+			std::map<BasicBlock*, std::set<BasicBlock*> > ROI;		//Hold used def for each bock
+			std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> > cloned;		//hold relation between original and clone
+			std::map<std::vector<BasicBlock*>, BasicBlock* > headCloned;		//hold relation between original and clone
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -84,7 +85,7 @@ namespace {
 			//Block indexes
 			int sourceBlock = 0;
 			int destinationBlock;
-			for (Function::const_iterator i = allblocks.begin(); i != allblocks.end(); i++) {
+			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++) {
 				//For each successor
 				for (int j = 0; j < (i->getTerminator())->getNumSuccessors();j++){
 					successorBlock = (i->getTerminator())->getSuccessor(j);	//Successor
@@ -307,11 +308,11 @@ namespace {
 							//If they are different blocks and one source reaches dest or the same block
 							if ((dist[sourceBlock*numBlock + destBlock]>0 && dist[sourceBlock*numBlock + destBlock]<1000000000) || sourceBlock==destBlock){
 								//Go through the killed defs for source block
-								for (std::set<int>::const_iterator k = killedDef[i].begin(); k != killedDef[i].end(); ++k){
+								for (std::set<int>::iterator k = killedDef[i].begin(); k != killedDef[i].end(); ++k){
 									int killed = *k;
 					
 									//GO through used defs for dest blocks
-									for (std::set<int>::const_iterator m = usedDef[j].begin(); m != usedDef[j].end(); ++m){
+									for (std::set<int>::iterator m = usedDef[j].begin(); m != usedDef[j].end(); ++m){
 										int used = *m;
 
 										//if there is an interesection between killed and used, dest is influenced
@@ -335,7 +336,7 @@ namespace {
 				int sourceBlock = basicBlockIndex[i];	//Initial block
 	
 				//GO through influenced blocks for each blocks
-				for (std::set<BasicBlock*>::const_iterator j = influencedNode[i].begin(); j != influencedNode[i].end(); ++j){ 
+				for (std::set<BasicBlock*>::iterator j = influencedNode[i].begin(); j != influencedNode[i].end(); ++j){ 
 					int endBlock = basicBlockIndex[*j]; 	//last block
 
 					std::set<BasicBlock*> curROI;
@@ -352,33 +353,78 @@ namespace {
 					}
 
 					//Insert into list of ROI
-					ROI.insert(curROI);
+					ROI[i] =curROI;
 				}
 			}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////REPLICATING//////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			//Go through all the ROI sets			
-			for (std::set<std::set<BasicBlock*> >::iterator i = ROI.begin(); i != ROI.end(); ++i){
-				
-				//Go through a specific set of ROI blocks
-				for (std::set<BasicBlock*>::iterator j=i->begin(); j!=i->end(); ++j){
-					BasicBlock *cloneBB = BasicBlock::Create((*j)->getContext(), Twine((*j)->getName() + "clone"), &F);
+			//Go through all the ROI sets and clone them		
+			for (std::map<BasicBlock*, std::set<BasicBlock*> >::iterator i = ROI.begin(); i != ROI.end(); ++i){
 
-					//Go through instructions for each block
-					for (BasicBlock::const_iterator k = (*j)->begin(); k!=(*j)->end(); ++k) {
-						//clone instruction     
-						Instruction *cloneInst = k->clone();
-						if (k->hasName()){
-							cloneInst->setName(k->getName()+"clone");
+				//Count number of predecessor blocks
+				int sourceBlock = basicBlockIndex[i->first];	//get index of top of ROI block
+				int numPred = 0;
+				for (int j = 0; j<numBlock; j++){
+					if (dist[j*numBlock + sourceBlock]==1){
+						numPred++;	//Increment
+					}
+				}
+				
+				//Create 1 for each predecessor
+				for (int k = 1; k<numPred; k++){						
+					std::vector<BasicBlock*> originalROI;				
+					std::vector<BasicBlock*> clonedROI;
+
+					//Go through a specific set of ROI blocks
+					for (std::set<BasicBlock*>::iterator j=(i->second).begin(); j!=(i->second).end(); ++j){
+
+						BasicBlock *cloneBB = BasicBlock::Create((*j)->getContext(), Twine((*j)->getName() + "clone"), &F);
+
+						//Go through instructions for each block
+						for (BasicBlock::iterator m = (*j)->begin(); m!=(*j)->end(); ++m) {
+							//clone instruction     
+							Instruction *cloneInst = m->clone();
+							if (m->hasName()){
+								cloneInst->setName(m->getName()+"clone");
+							}
+							cloneBB->getInstList().push_back(cloneInst);
 						}
-						cloneBB->getInstList().push_back(cloneInst);
+						//Add cloned BB
+						clonedROI.insert(clonedROI.end(), cloneBB);
+						originalROI.insert(originalROI.end(), *j);
 
 					}
-
+					//Map orininal to cloned
+					cloned[clonedROI] = originalROI;
+					headCloned[originalROI] = i->first;
 				}
 			}
 
+			//Go through cloned and fix up pointers
+			for (std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> >::iterator i = cloned.begin(); i!=cloned.end(); ++i){
+				for (std::vector<BasicBlock*>::const_iterator j=(i->first).begin(); j!=(i->first).end(); ++j){
+					for (int k = 0; k<(*j)->getTerminator()->getNumSuccessors(); k++){
+						//Get the destination of the call
+						BasicBlock* nextBlock = (*j)->getTerminator()->getSuccessor(k);
+
+						//Try to find the block within the ROI
+						std::vector<BasicBlock*>::iterator it;
+						it = std::find((i->second).begin(),(i->second).end(), nextBlock);
+
+						//If it is found, we have to redirect it
+						if (it!=(i->second).end()){
+							//cast as branch
+							BranchInst* bi = dyn_cast<BranchInst>((*j)->getTerminator());
+							if (bi){
+								//get next block in clone and set as successor
+								BasicBlock* cloneNextBlock = i->first[it - (i->second).begin()];
+								bi->setSuccessor (k, cloneNextBlock);
+							}
+						}
+					}				
+				}
+			}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -395,7 +441,7 @@ namespace {
 */
 /*
 			//Print Killed def
-			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = killedDef.begin(); itr != killedDef.end(); ++itr){
+			for (std::map<BasicBlock*, std::set<int> >::iterator itr = killedDef.begin(); itr != killedDef.end(); ++itr){
 				errs() <<"\n"<<itr->first->getName();
 				for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
 				   	errs() << ' ' << instructionDefIndex[*it]->def<<"-"<<instructionDefIndex[*it]->lineNum;
@@ -405,7 +451,7 @@ namespace {
 */
 /*
 			//Print Used def
-			for (std::map<BasicBlock*, std::set<int> >::const_iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
+			for (std::map<BasicBlock*, std::set<int> >::iterator itr = usedDef.begin(); itr != usedDef.end(); ++itr){
 				errs() <<"\n"<<itr->first->getName();
 				for (std::set<int>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
 					errs() << ' ' << instructionDefIndex[*it]->def<<"-"<<instructionDefIndex[*it]->lineNum;
@@ -414,7 +460,7 @@ namespace {
 */
 /*
 			//Print Influenced def
-			for (std::map<BasicBlock*, std::set<BasicBlock*> >::const_iterator itr = influencedNode.begin(); itr != influencedNode.end(); ++itr){
+			for (std::map<BasicBlock*, std::set<BasicBlock*> >::iterator itr = influencedNode.begin(); itr != influencedNode.end(); ++itr){
 				errs() <<"\n"<<itr->first->getName();
 				for (std::set<BasicBlock*>::iterator it=(itr->second).begin(); it!=(itr->second).end(); ++it){
 					errs() <<" "<<(*it)->getName();
@@ -423,7 +469,7 @@ namespace {
 */
 /*
 			//Print ROI
-			for (std::set<std::set<BasicBlock*> >::const_iterator itr = ROI.begin(); itr != ROI.end(); ++itr){
+			for (std::set<std::set<BasicBlock*> >::iterator itr = ROI.begin(); itr != ROI.end(); ++itr){
 				errs() <<"\n";
 				for (std::set<BasicBlock*>::iterator it=itr->begin(); it!=itr->end(); ++it){
 					errs() <<" "<<(*it)->getName();
