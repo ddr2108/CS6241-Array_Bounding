@@ -34,16 +34,16 @@ namespace {
 		}
 	} defInstruct;
 
-	typedef struct _instructName{
-		StringRef oldName;
-		StringRef newName;
+	typedef struct _instTranslation{
+		Instruction* oldInst;
+		Instruction* newInst;
 					
 		//Constructor
-		 _instructName(StringRef oldNameIn, StringRef newNameIn){
-			oldName = oldNameIn;
-			newName = newNameIn;
+		 _instTranslation(Instruction* oldInstIn, Instruction* newInstIn){
+			oldInst = oldInstIn;
+			newInst = newInstIn;
 		}
-	}instructName;
+	}instTranslation;
 
 	struct p11 : public FunctionPass {
 		// Pass identification, replacement for typeid
@@ -67,7 +67,7 @@ namespace {
 			std::map<BasicBlock*, std::set<BasicBlock*> > ROI;		//Hold used def for each bock
 			std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> > cloned;		//hold relation between original and clone
 			std::map<std::vector<BasicBlock*>, BasicBlock* > headCloned;		//hold relation between original and clone
-			std::map<std::vector<BasicBlock*>, std::set<instructName*> > renameBlock;	//hold relation between ROI and new names
+			std::map<std::vector<BasicBlock*>, std::vector<instTranslation*> > renameBlock;	//hold relation between ROI and new names
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -389,24 +389,24 @@ namespace {
 				for (int k = 1; k<numPred; k++){						
 					std::vector<BasicBlock*> originalROI;				
 					std::vector<BasicBlock*> clonedROI;
-					std::set<instructName*> newNames;
+					std::vector<instTranslation*> newTranslations;
 
 					//Go through a specific set of ROI blocks
 					for (std::set<BasicBlock*>::iterator j=(i->second).begin(); j!=(i->second).end(); ++j){
 
 						BasicBlock *cloneBB = BasicBlock::Create((*j)->getContext(), Twine((*j)->getName() + "clone"), &F);
-
 						//Go through instructions for each block
 						for (BasicBlock::iterator m = (*j)->begin(); m!=(*j)->end(); ++m) {
 							//clone instruction     
 							Instruction *cloneInst = m->clone();
 							if (m->hasName()){
 								cloneInst->setName(m->getName() + "clone");
-
-								//Insert name translation
-								instructName* curInstName = new instructName(m->getName(), cloneInst->getName());
-								newNames.insert(curInstName);
 							}
+
+							//Insert name translation
+							instTranslation* curInstTranlate = new instTranslation(m, cloneInst);
+							newTranslations.insert(newTranslations.end(), curInstTranlate);
+
 							cloneBB->getInstList().push_back(cloneInst);
 						}
 						//Add cloned BB
@@ -417,16 +417,36 @@ namespace {
 					//Map orininal to cloned
 					cloned[clonedROI] = originalROI;
 					headCloned[clonedROI] = i->first;
-					renameBlock[clonedROI] = newNames;
+					renameBlock[clonedROI] = newTranslations;
+				}
+			}
+
+			//Fix up names
+			//Go throuch each clone
+			for (std::map<std::vector<BasicBlock*>, std::vector<instTranslation*> >::iterator i = renameBlock.begin(); i!=renameBlock.end(); ++i){
+				//Go throuch each block in clone
+				for (std::vector<BasicBlock*>::const_iterator j=(i->first).begin(); j!=(i->first).end(); ++j){
+					//Go throuch each instruction					
+					for (BasicBlock::iterator k = (*j)->begin(); k!=(*j)->end(); ++k) {
+						//Go throuch each operand in each instruction
+						for (int m = 0; m<k->getNumOperands() ;m++){
+							//Go through each rename
+							for (int n = 0; n<i->second.size();n++){
+								instTranslation* instFixing = i->second[n];
+								//if refer to old, replace
+								if (k->getOperand(m)==instFixing->oldInst){
+									k->setOperand(m,instFixing->newInst);
+								}
+							}
+						}
+					}
+
 				}
 			}
 
 			//Go through cloned and fix up pointers
 			for (std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> >::iterator i = cloned.begin(); i!=cloned.end(); ++i){
 				for (std::vector<BasicBlock*>::const_iterator j=(i->first).begin(); j!=(i->first).end(); ++j){
-					//Fix up names
-					
-
 					//Fix up terminator pointers
 					for (int k = 0; k<(*j)->getTerminator()->getNumSuccessors(); k++){
 						//Get the destination of the call
