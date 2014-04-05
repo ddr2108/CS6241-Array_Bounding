@@ -36,7 +36,7 @@ namespace
 		map<BasicBlock*, Output* > inSet;
 		map<BasicBlock*, set<BasicBlock*> > pred;
 
-		set<Value*>* backwards(Output* output, BasicBlock* block)
+		set<Value*>* backwards(Output* output, BasicBlock* block, bool doRemove=false)
 		{
 			set<Value*>* S = new set<Value*>();
 
@@ -50,6 +50,7 @@ namespace
 
 				//errs() << gen->size() << "\n";
 				bool conflict = false;
+				map<Instruction*, Instruction*> toRemove;
 				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
 				{
 					CmpInst* localInst = dyn_cast<CmpInst>(*localItr);
@@ -65,7 +66,12 @@ namespace
 						if(localInst->getPredicate() == inst->getPredicate())
 						{
 							if(localInst->getOperand(1) == inst->getOperand(1))
+							{
 								errs() << "Matching = " << *localInst << "\n";
+								toRemove[localInst] = inst;
+								//localInst->replaceAllUsesWith(inst);
+								//localInst->eraseFromParent();
+							}
 							else
 							{
 								errs() << "Conflict\n";
@@ -75,11 +81,127 @@ namespace
 					}
 				}
 
+				for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
+				{
+					gen->erase(remItr->first);
+					remItr->first->replaceAllUsesWith(remItr->second);
+					remItr->first->eraseFromParent();
+				}
+
 				if(!conflict) S->insert(*itr);
 			}
 
 			errs() << "S size: " << S->size() << "\n";
 			return S;
+		}
+
+		void calculateRedundant(BasicBlock* entry)
+		{
+			queue<BasicBlock*> toVisit;
+			toVisit.push(entry);
+			set<BasicBlock*> visited;
+
+			while(!toVisit.empty())
+			{
+				BasicBlock* block = toVisit.front();
+				toVisit.pop();
+
+				if(visited.find(block) != visited.end()) continue;
+
+				//Retrieve genset and pred
+				set<Value*>* gen = genSet[block];
+				Output* outset = outputs[block];
+				Output* inset = inSet[block];
+
+				//Create sets if they are null
+				if(inset == NULL)
+				{
+					//errs() << "Creating inset for block: " << block->getName() << "\n";
+					inset = new Output();
+					inSet[block] = inset;
+				}
+				if(outset == NULL)
+				{
+					//errs() << "Creating outset for block: " << block->getName() << "\n";
+					outset = new Output();
+					outputs[block] = outset;
+				}
+
+				//Calculate IN
+				inset->outSet.clear();
+				inset->outSrc.clear();
+
+				set<BasicBlock*>* preds = &pred[block];
+				bool isReady = true;
+				for(set<BasicBlock*>::iterator itr = preds->begin(); itr != preds->end(); itr++)
+				{
+					Output* outs = outputs[*itr];
+					if(outs == NULL)
+					{
+						isReady = false;
+						break;
+					}
+					for(set<Value*>::iterator valItr = outs->outSet.begin(); valItr != outs->outSet.end(); valItr++)
+					{
+						if(itr == preds->begin())
+						{
+							inset->outSet.insert(*valItr);
+							inset->outSrc[*valItr] = outs->outSrc[*valItr];
+						}
+						else
+						{
+							set<Value*> toRemove;
+
+							//See if the comparison is in the inset set
+							for(set<Value*>::iterator outItr = outs->outSet.begin(); outItr != outs->outSet.end(); outItr++)
+							{
+								if(outs->outSet.find(*outItr) == outs->outSet.end())
+									toRemove.insert(*outItr);
+							}
+
+							for(set<Value*>::iterator outItr = toRemove.begin(); outItr != toRemove.end(); outItr++)
+							{
+								inset->outSet.erase(*outItr);
+								inset->outSrc.erase(*outItr);
+							}
+						}
+					}
+				}
+
+				if(!isReady)
+				{
+					toVisit.push(block);
+					continue;
+				}
+
+				visited.insert(block);
+
+				set<Value*>* forward = backwards(inset, block);
+
+				//Calculate OUT
+				outset->outSet.clear();
+				outset->outSrc.clear();
+
+				//Add gen
+				for(set<Value*>::iterator itr = gen->begin(); itr != gen->end(); itr++)
+				{
+					outset->outSet.insert(*itr);
+					outset->outSrc[*itr] = block;
+				}
+				//Add forward set
+				for(set<Value*>::iterator itr = forward->begin(); itr != forward->end(); itr++)
+				{
+					outset->outSet.insert(*itr);
+					outset->outSrc[*itr] = block;
+				}
+
+				//Add Successors
+				TerminatorInst* termInst = block->getTerminator();
+				int numSucc = termInst->getNumSuccessors();
+				for(int i = 0; i < numSucc; i++)
+					toVisit.push(termInst->getSuccessor(i));
+			}
+			
 		}
 
 		void calculateSets(set<BasicBlock*>* term)
@@ -361,7 +483,7 @@ namespace
 			nextBlocks.push(&F.getEntryBlock());
 			visited.clear();
 			//Visit until nore more blocks left
-			while(!nextBlocks.empty()){
+			/*while(!nextBlocks.empty()){
 				//Get next block
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
@@ -408,9 +530,10 @@ namespace
 					}
 				}
 			
-			}
+			}*/
 
-			calculateSets(&lastBlock);
+			//calculateSets(&lastBlock);
+			calculateRedundant(&F.getEntryBlock());
 
 
 			//Print out resulting assembly
