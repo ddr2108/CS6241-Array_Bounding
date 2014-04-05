@@ -320,7 +320,7 @@ namespace {
 
 						if (usedDef[j].size() > 0){
 							//If they are different blocks and one source reaches dest or the same block
-							if ((dist[sourceBlock*numBlock + destBlock]>0 && dist[sourceBlock*numBlock + destBlock]<1000000000) || sourceBlock==destBlock){
+							if ((dist[sourceBlock*numBlock + destBlock]>0 && dist[sourceBlock*numBlock + destBlock]<100000000) || sourceBlock==destBlock){
 								//Go through the killed defs for source block
 								for (std::set<int>::iterator k = killedDef[i].begin(); k != killedDef[i].end(); ++k){
 									int killed = *k;
@@ -367,7 +367,9 @@ namespace {
 					}
 
 					//Insert into list of ROI
-					ROI[i] =curROI;
+					if (curROI.size()>1){
+						ROI[i] =curROI;
+					}
 				}
 			}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -384,9 +386,10 @@ namespace {
 						numPred++;	//Increment
 					}
 				}
-				
+
 				//Create 1 for each predecessor
-				for (int k = 1; k<numPred; k++){						
+				for (int k = 1; k<numPred; k++){
+
 					std::vector<BasicBlock*> originalROI;				
 					std::vector<BasicBlock*> clonedROI;
 					std::vector<instTranslation*> newTranslations;
