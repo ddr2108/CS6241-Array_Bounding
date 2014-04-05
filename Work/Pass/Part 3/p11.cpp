@@ -34,6 +34,17 @@ namespace {
 		}
 	} defInstruct;
 
+	typedef struct _instructName{
+		StringRef oldName;
+		StringRef newName;
+					
+		//Constructor
+		 _instructName(StringRef oldNameIn, StringRef newNameIn){
+			oldName = oldNameIn;
+			newName = newNameIn;
+		}
+	}instructName;
+
 	struct p11 : public FunctionPass {
 		// Pass identification, replacement for typeid
 		static char ID; 
@@ -44,6 +55,7 @@ namespace {
 			
 			//Information about structure of program
 			std::map<BasicBlock*, int> basicBlockIndex;
+			std::map<int, BasicBlock*> basicBlockReverseIndex;
 			std::map<Instruction*, int> instructionIndex;
 			std::map<int, defInstruct*> instructionDefIndex;
 
@@ -55,6 +67,7 @@ namespace {
 			std::map<BasicBlock*, std::set<BasicBlock*> > ROI;		//Hold used def for each bock
 			std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> > cloned;		//hold relation between original and clone
 			std::map<std::vector<BasicBlock*>, BasicBlock* > headCloned;		//hold relation between original and clone
+			std::map<std::vector<BasicBlock*>, std::set<instructName*> > renameBlock;	//hold relation between ROI and new names
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -64,6 +77,7 @@ namespace {
 			Function::BasicBlockListType &allblocks = F.getBasicBlockList();
 			//Go through basic blocks
 			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++) {
+				basicBlockReverseIndex[numBlock] = i;
 				basicBlockIndex[i] = numBlock++;		//hold information about where the basic block is
 			}
 
@@ -375,6 +389,7 @@ namespace {
 				for (int k = 1; k<numPred; k++){						
 					std::vector<BasicBlock*> originalROI;				
 					std::vector<BasicBlock*> clonedROI;
+					std::set<instructName*> newNames;
 
 					//Go through a specific set of ROI blocks
 					for (std::set<BasicBlock*>::iterator j=(i->second).begin(); j!=(i->second).end(); ++j){
@@ -386,7 +401,11 @@ namespace {
 							//clone instruction     
 							Instruction *cloneInst = m->clone();
 							if (m->hasName()){
-								cloneInst->setName(m->getName()+"clone");
+								cloneInst->setName(m->getName() + "clone");
+
+								//Insert name translation
+								instructName* curInstName = new instructName(m->getName(), cloneInst->getName());
+								newNames.insert(curInstName);
 							}
 							cloneBB->getInstList().push_back(cloneInst);
 						}
@@ -397,13 +416,18 @@ namespace {
 					}
 					//Map orininal to cloned
 					cloned[clonedROI] = originalROI;
-					headCloned[originalROI] = i->first;
+					headCloned[clonedROI] = i->first;
+					renameBlock[clonedROI] = newNames;
 				}
 			}
 
 			//Go through cloned and fix up pointers
 			for (std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> >::iterator i = cloned.begin(); i!=cloned.end(); ++i){
 				for (std::vector<BasicBlock*>::const_iterator j=(i->first).begin(); j!=(i->first).end(); ++j){
+					//Fix up names
+					
+
+					//Fix up terminator pointers
 					for (int k = 0; k<(*j)->getTerminator()->getNumSuccessors(); k++){
 						//Get the destination of the call
 						BasicBlock* nextBlock = (*j)->getTerminator()->getSuccessor(k);
@@ -423,6 +447,75 @@ namespace {
 							}
 						}
 					}				
+				}
+			}
+
+			//Fix up predecessor  pointers
+			while(cloned.size()>0){
+				//Go through each ROI
+				for (std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> >::iterator i = cloned.begin(); i!=cloned.end(); ++i){
+					std::vector<BasicBlock*> clonedROI = i->first;
+					std::vector<BasicBlock*> originalROI = i->second;
+
+					//Get information about head of basic block	
+					BasicBlock* headBlock = headCloned[i->first];
+					int headBlockIndex = basicBlockIndex[headBlock];
+
+					//Find the predecessors of block
+					int numPred = 0;
+					for (int j = 0; j<numBlock; j++){
+						if (dist[j*numBlock + headBlockIndex]==1){
+							numPred++;	//Increment
+							//First predecessor can just use the original
+							if (numPred==1){
+								continue;
+							}
+
+							//Get cloned head block
+							BasicBlock* cloneHeadBlock;
+							std::vector<BasicBlock*>::iterator it;
+							it = std::find(originalROI.begin(),originalROI.end(), headBlock);
+							if (it!=originalROI.end()){
+								//get next block in clone and set as successor
+								cloneHeadBlock = clonedROI[it - originalROI.begin()];
+							}
+
+
+							//Get the previous block
+							BasicBlock* prevBlock = basicBlockReverseIndex[j];
+							//Go through the successors for the prdedecessor block
+							for (int k = 0; k<prevBlock->getTerminator()->getNumSuccessors(); k++){
+								//Get the destination of the call and check if dest is head
+								BasicBlock* nextBlock = prevBlock->getTerminator()->getSuccessor(k);
+								if (nextBlock!=headBlock){
+									continue;
+								}
+
+								//cast as branch
+								BranchInst* bi = dyn_cast<BranchInst>(prevBlock->getTerminator());
+								if (bi){
+									//get head block in clone and set as successor
+									bi->setSuccessor (k, cloneHeadBlock);
+									
+									//Remove from maps
+									cloned.erase(clonedROI);
+									headCloned.erase(clonedROI);
+									break;
+								}						
+							}
+						}
+
+						//Go through all clones
+						for (std::map<std::vector<BasicBlock*>, std::vector<BasicBlock*> >::iterator k = cloned.begin(); k!=cloned.end(); ++k){ 
+							//Find another clone for same blocks
+							if (k->second==originalROI){
+								clonedROI = k->first;
+								break; 
+							}
+						}
+
+
+					}
 				}
 			}
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
