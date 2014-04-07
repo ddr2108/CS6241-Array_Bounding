@@ -28,6 +28,7 @@ namespace
 		{
 			set<Value*> outSet;
 			map<Value*, BasicBlock*> outSrc;
+			map<Value*, state> outState;
 		};
 
 		map<Value*, Value*> arraySizeMap;
@@ -37,6 +38,62 @@ namespace
 		map<BasicBlock*, set<Value*>* > genSet;
 		map<BasicBlock*, Output* > inSet;
 		map<BasicBlock*, set<BasicBlock*> > pred;
+
+		state getState(StoreInst* inst)
+		{
+			state retn = UNCHANGED;
+
+			Value* origInst = inst->getOperand(1);
+
+			queue<Value*> evalList;
+			evalList.push(inst->getOperand(0));
+
+			//We will track if this variable was part of the equation, or just holds the value
+			bool varModified = false;
+
+			while(!evalList.empty())
+			{
+				Value* val = evalList.front();
+				evalList.pop();
+
+				if(Instruction* valInst = dyn_cast<Instruction>(val))
+				{
+					//Check to see how the variable is changing (Constants only)
+					if(valInst->getOpcode() == Instruction::Add || valInst->getOpcode() == Instruction::Mul)
+					{
+						//If sub and add mix, we don't know the results
+						if(retn == INCREASED || retn == UNCHANGED)
+							retn = INCREASED;
+					}
+					if(valInst->getOpcode() == Instruction::Sub 
+						|| valInst->getOpcode() == Instruction::SDiv || valInst->getOpcode() == Instruction::UDiv)
+					{
+						//If sub and add mix, we don't know the results
+						if(retn == DECREASED || retn == UNCHANGED)
+							retn = DECREASED;
+					}
+
+					//If there's a load inst, variables are involved
+					if(LoadInst* load = dyn_cast<LoadInst>(valInst))
+					{
+						//Either the original variable was modified, or an unknown dynamic variable is involved
+						if(load->getOperand(0) == origInst) varModified = true;
+						else retn = UNKNOWN;
+					}
+
+					int numOp = valInst->getNumOperands();
+					for(int i = 0; i < numOp; i++)
+						evalList.push(valInst->getOperand(i));
+				}
+			}
+
+			//We don't know what this value is in relation to the original variable
+			if(!varModified) retn = UNKNOWN;
+
+			errs() << retn << " : " << *inst << "\n";
+
+			return retn;
+		}
 
 		set<Value*>* backwards(Output* output, BasicBlock* block, bool doRemove=false)
 		{
@@ -513,6 +570,12 @@ namespace
 
 						}
 
+					}
+
+					//Trace through the store instruction to see if we can determine how this value changed
+					if(StoreInst* storeInst = dyn_cast<StoreInst>(inst))
+					{
+						getState(storeInst);
 					}
 
 					//add new blocks to go to
