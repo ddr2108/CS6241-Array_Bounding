@@ -22,6 +22,8 @@ namespace
 		static char ID;
 		CSE6142() : FunctionPass(ID){}
 
+		enum state {UNCHANGED, UNKNOWN, INCREASED, DECREASED};
+
 		struct Output
 		{
 			set<Value*> outSet;
@@ -61,22 +63,76 @@ namespace
 					//Oper 1 is the bound we are checking
 
 					//Are we checking the same variable
-					if(localInst->getOperand(0) == inst->getOperand(0))
+					bool equalConst = false;
+					ConstantInt* localConst = dyn_cast<ConstantInt>(localInst->getOperand(0));
+					ConstantInt* prevConst = dyn_cast<ConstantInt>(inst->getOperand(0));
+
+					//We count equivalent constants as being the same variable
+					if(localConst != NULL && prevConst != NULL)
+					{
+						errs() << localConst->getZExtValue() << "\n";
+						if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
+					}
+
+					if(localInst->getOperand(0) == inst->getOperand(0) || equalConst)
 					{
 						if(localInst->getPredicate() == inst->getPredicate())
 						{
+							localConst = dyn_cast<ConstantInt>(localInst->getOperand(1));
+							prevConst = dyn_cast<ConstantInt>(inst->getOperand(1));
+
+
 							if(localInst->getOperand(1) == inst->getOperand(1))
 							{
 								errs() << "Matching = " << *localInst << "\n";
 								toRemove[localInst] = inst;
-								//localInst->replaceAllUsesWith(inst);
-								//localInst->eraseFromParent();
+							}
+							else if(localInst->getPredicate() == CmpInst::ICMP_SLT)
+							{
+								errs() << "SLT\n";
+								if(localConst == NULL) conflict = true;
+								else if(prevConst == NULL) conflict = true;
+								else if(prevConst->uge(localConst->getZExtValue()));
+								else conflict = true;
+							}
+							else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
+							{
+								errs() << "SGT\n";
+								if(localConst == NULL) conflict = true;
+								else if(prevConst == NULL) conflict = true;
+								else if(localConst->uge(prevConst->getZExtValue()));
+								else conflict = true;
 							}
 							else
 							{
 								errs() << "Conflict\n";
 								conflict = true;
 							}
+						}
+					}
+					else if(localInst->getOperand(1) == inst->getOperand(1))
+					{
+						if(localInst->getPredicate() == CmpInst::ICMP_SLT)
+						{
+							errs() << "SLT\n";
+							if(localConst == NULL) conflict = true;
+							else if(prevConst == NULL) conflict = true;
+							else if(prevConst->uge(localConst->getZExtValue()))
+							{
+								toRemove[localInst] = inst;
+							}
+							else conflict = true;
+						}
+						else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
+						{
+							errs() << "SGT\n";
+							if(localConst == NULL) conflict = true;
+							else if(prevConst == NULL) conflict = true;
+							else if(localConst->uge(prevConst->getZExtValue()))
+							{
+								toRemove[localInst] = inst;
+							}
+							else conflict = true;
 						}
 					}
 				}
@@ -483,7 +539,7 @@ namespace
 			nextBlocks.push(&F.getEntryBlock());
 			visited.clear();
 			//Visit until nore more blocks left
-			/*while(!nextBlocks.empty()){
+			while(!nextBlocks.empty()){
 				//Get next block
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
@@ -530,7 +586,7 @@ namespace
 					}
 				}
 			
-			}*/
+			}
 
 			//calculateSets(&lastBlock);
 			calculateRedundant(&F.getEntryBlock());
