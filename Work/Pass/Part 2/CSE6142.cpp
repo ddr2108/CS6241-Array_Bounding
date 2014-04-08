@@ -38,6 +38,7 @@ namespace
 		map<BasicBlock*, set<Value*>* > genSet;
 		map<BasicBlock*, Output* > inSet;
 		map<BasicBlock*, set<BasicBlock*> > pred;
+		map<BasicBlock*, map<Value*, state> > stateChanges;
 
 		state getState(StoreInst* inst)
 		{
@@ -575,7 +576,9 @@ namespace
 					//Trace through the store instruction to see if we can determine how this value changed
 					if(StoreInst* storeInst = dyn_cast<StoreInst>(inst))
 					{
-						getState(storeInst);
+						state varState = getState(storeInst);
+						Value* changingVar = storeInst->getOperand(1);
+						stateChanges[block][changingVar] = varState;
 					}
 
 					//add new blocks to go to

@@ -20,7 +20,12 @@ int test(){
 	printf("After");
 	if(branchIf)printf("Branch");
 	printf("Before");
-	b[4] = 10;
+	z = z + 1;
+	b[z] = 10;
+	printf("After");
+	if(branchIf)printf("Branch");
+	printf("Before");
+	a[5] = 10;
 	printf("After");
 	if(branchIf)printf("Branch");
 	printf("Before");
@@ -29,6 +34,10 @@ int test(){
 	if(branchIf)printf("Branch");
 	printf("Before");
 	a[28] = 10;
+	printf("After");
+	if(branchIf)printf("Branch");
+	printf("Before");
+	a[25] = 10;
 	printf("After");
 	if(branchIf)printf("Branch");
 	x = a[30];	
