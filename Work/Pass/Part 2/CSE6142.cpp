@@ -96,6 +96,22 @@ namespace
 			return retn;
 		}
 
+		Value* getBaseValue(Value* value)
+		{
+			Value* retn = value;
+			while(Instruction* inst = dyn_cast<Instruction>(retn))
+			{
+				if(inst->getNumOperands() != 1)
+					break;
+				else if(!dyn_cast<CastInst>(inst) && !dyn_cast<LoadInst>(inst))
+					break;
+				else
+					retn = inst->getOperand(0);
+			}
+
+			return retn;
+		}
+
 		set<Value*>* backwards(Output* output, BasicBlock* block, bool doRemove=false)
 		{
 			set<Value*>* S = new set<Value*>();
@@ -111,11 +127,48 @@ namespace
 				//errs() << gen->size() << "\n";
 				bool conflict = false;
 				map<Instruction*, Instruction*> toRemove;
+
+				Value* op1 = getBaseValue(inst->getOperand(0));
+				Value* op2 = getBaseValue(inst->getOperand(1));
+
+				state changeStateOp1 = stateChanges[block][op1];
+				state changeStateOp2 = stateChanges[block][op2];
+
+				//See if this block killed one of the compare's operands
+				if(changeStateOp1 != UNCHANGED || changeStateOp2 != UNCHANGED)
+				{
+					errs() << changeStateOp1 << " :: " << changeStateOp2 << "\n";
+					switch(changeStateOp1)
+					{
+					case UNKNOWN:
+						conflict = true;
+						break;
+					case INCREASED:
+						if(inst->getPredicate() == CmpInst::ICMP_SLT)
+						{
+							errs() << "Killing upper\n";
+							conflict = true;
+						}
+						break;
+					case DECREASED:
+						if(inst->getPredicate() == CmpInst::ICMP_SGT)
+						{
+							errs() << "Killing lower\n";
+							conflict = true;
+						}
+						break;
+					}
+				}
+
 				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
 				{
 					CmpInst* localInst = dyn_cast<CmpInst>(*localItr);
 
+					Value* localOp1 = getBaseValue(localInst->getOperand(0));
+					Value* localOp2 = getBaseValue(localInst->getOperand(1));
+
 					errs() << *localInst << " vs " << *inst << "\n";
+					errs() << *op1 << " vs " << *localOp1 << "\n";
 
 					//Oper 0 is what the index is
 					//Oper 1 is the bound we are checking
@@ -132,15 +185,15 @@ namespace
 						if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
 					}
 
-					if(localInst->getOperand(0) == inst->getOperand(0) || equalConst)
+					if(localOp1 == op1 || equalConst)
 					{
 						if(localInst->getPredicate() == inst->getPredicate())
 						{
-							localConst = dyn_cast<ConstantInt>(localInst->getOperand(1));
-							prevConst = dyn_cast<ConstantInt>(inst->getOperand(1));
+							localConst = dyn_cast<ConstantInt>(localOp2);
+							prevConst = dyn_cast<ConstantInt>(op2);
 
 
-							if(localInst->getOperand(1) == inst->getOperand(1))
+							if(localOp2 == op2)
 							{
 								errs() << "Matching = " << *localInst << "\n";
 								toRemove[localInst] = inst;
