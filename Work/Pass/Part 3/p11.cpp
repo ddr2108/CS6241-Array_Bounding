@@ -106,6 +106,7 @@ namespace {
 			for (Function::iterator i = allblocks.begin(); i != allblocks.end(); i++) {
 				basicBlockReverseIndex[numBlock] = i;
 				basicBlockIndex[i] = numBlock++;		//hold information about where the basic block is
+
 			}
 
 			//Allocate array
@@ -394,7 +395,7 @@ namespace {
 					}
 
 					//Insert into list of ROI
-					if (curROI.size()>1){
+					if (curROI.size()>0){
 						ROI[i] =curROI;
 					//	break;			//FIX
 					}
