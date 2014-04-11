@@ -11,6 +11,7 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/IR/Dominators.h"
+#include "llvm/Analysis/PostDominators.h"
 #include <map>
 #include <set>
 #include <queue>
@@ -53,6 +54,7 @@ namespace {
 
 		//Run for each function
 		virtual bool runOnFunction(Function &F){
+      		PostDominatorTree& PDT = getAnalysis<PostDominatorTree>();
 
 			//Information about structure of program
 			std::map<BasicBlock*, int> basicBlockIndex;
@@ -829,7 +831,6 @@ namespace {
 									curID = curInstComboID[0];
 								}
 
-
 								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0 && dominatorTree->dominates(hashTableBlock[curInstComboID],block)){
 	
 									int canReplaceFlag = 0;
@@ -867,9 +868,11 @@ namespace {
 										storeInst = replacementStore;
 
 										simplifiedFlag = 1;
-									}else{
-										curID = ID++;
 									}
+								}
+
+								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0 && PDT.dominates(block, hashTableBlock[curInstComboID])){
+									hashTableBlock[curInstComboID] = block;
 								}
 
 								//Insert into ValueID table
@@ -1129,7 +1132,9 @@ namespace {
 		}
 
 		virtual void getAnalysisUsage(AnalysisUsage &AU) const {
-		  	AU.addRequired<LoopInfo>();		//add request	
+		  	AU.addRequired<LoopInfo>();		//add request
+      			AU.addRequired<PostDominatorTree>();	//init request
+	
 		}
 
 	};
