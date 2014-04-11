@@ -1,12 +1,12 @@
 digraph "CFG for 'main' function" {
 	label="CFG for 'main' function";
 
-	Node0x1ceace0 [shape=record,label="{entry:\l  %retval = alloca i32, align 4\l  %d = alloca i32, align 4\l  %z = alloca i32, align 4\l  %k = alloca i32, align 4\l  %l = alloca i32, align 4\l  store i32 0, i32* %retval\l  call void @llvm.dbg.declare(metadata !\{i32* %d\}, metadata !12), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %z\}, metadata !14), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %k\}, metadata !15), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %l\}, metadata !16), !dbg !13\l  store i32 15, i32* %d, align 4, !dbg !17\l  store i32 15, i32* %z, align 4, !dbg !18\l  %0 = load i32* %z, align 4, !dbg !19\l  %add = add nsw i32 10, %0, !dbg !19\l  store i32 %add, i32* %d, align 4, !dbg !19\l  %GVN = load i32* %d, align 4\l  store i32 %GVN, i32* %l, align 4\l  %1 = load i32* %z, align 4, !dbg !20\l  %cmp = icmp sgt i32 %1, 5, !dbg !20\l  br i1 %cmp, label %if.then, label %if.else, !dbg !20\l|{<s0>T|<s1>F}}"];
-	Node0x1ceace0:s0 -> Node0x1cea160;
-	Node0x1ceace0:s1 -> Node0x1ceb3d0;
-	Node0x1cea160 [shape=record,label="{if.then:                                          \l  store i32 25, i32* %d, align 4, !dbg !22\l  br label %if.end, !dbg !24\l}"];
-	Node0x1cea160 -> Node0x1ce6850;
-	Node0x1ceb3d0 [shape=record,label="{if.else:                                          \l  store i32 9, i32* %d, align 4, !dbg !25\l  br label %if.end\l}"];
-	Node0x1ceb3d0 -> Node0x1ce6850;
-	Node0x1ce6850 [shape=record,label="{if.end:                                           \l  %2 = load i32* %d, align 4, !dbg !27\l  store i32 %2, i32* %z, align 4, !dbg !27\l  %3 = load i32* %z, align 4, !dbg !28\l  %add2 = add nsw i32 10, %3, !dbg !28\l  store i32 %add2, i32* %k, align 4, !dbg !28\l  %GVN1 = load i32* %k, align 4\l  store i32 %GVN1, i32* %l, align 4\l  %GVN2 = load i32* %k, align 4\l  store i32 %GVN2, i32* %l, align 4\l  %4 = load i32* %retval, !dbg !29\l  ret i32 %4, !dbg !29\l}"];
+	Node0x1b1ecd0 [shape=record,label="{entry:\l  %retval = alloca i32, align 4\l  %d = alloca i32, align 4\l  %z = alloca i32, align 4\l  %k = alloca i32, align 4\l  %l = alloca i32, align 4\l  store i32 0, i32* %retval\l  call void @llvm.dbg.declare(metadata !\{i32* %d\}, metadata !12), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %z\}, metadata !14), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %k\}, metadata !15), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %l\}, metadata !16), !dbg !13\l  store i32 15, i32* %d, align 4, !dbg !17\l  store i32 15, i32* %z, align 4, !dbg !18\l  %0 = load i32* %z, align 4, !dbg !19\l  %add = add nsw i32 10, %0, !dbg !19\l  store i32 %add, i32* %d, align 4, !dbg !19\l  %1 = load i32* %d, align 4, !dbg !20\l  store i32 %1, i32* %l, align 4, !dbg !20\l  %2 = load i32* %z, align 4, !dbg !21\l  %cmp = icmp sgt i32 %2, 5, !dbg !21\l  br i1 %cmp, label %if.then, label %if.else, !dbg !21\l|{<s0>T|<s1>F}}"];
+	Node0x1b1ecd0:s0 -> Node0x1b1a630;
+	Node0x1b1ecd0:s1 -> Node0x1b1a690;
+	Node0x1b1a630 [shape=record,label="{if.then:                                          \l  br label %if.end, !dbg !23\l}"];
+	Node0x1b1a630 -> Node0x1b1a6f0;
+	Node0x1b1a690 [shape=record,label="{if.else:                                          \l  br label %if.end\l}"];
+	Node0x1b1a690 -> Node0x1b1a6f0;
+	Node0x1b1a6f0 [shape=record,label="{if.end:                                           \l  %3 = load i32* %l, align 4, !dbg !25\l  %add1 = add nsw i32 35, %3, !dbg !25\l  store i32 %add1, i32* %k, align 4, !dbg !25\l  %GVN = load i32* %k, align 4\l  store i32 %GVN, i32* %l, align 4\l  %4 = load i32* %d, align 4, !dbg !26\l  %add3 = add nsw i32 15, %4, !dbg !26\l  store i32 %add3, i32* %l, align 4, !dbg !26\l  %GVN1 = load i32* %l, align 4\l  store i32 %GVN1, i32* %k, align 4\l  %5 = load i32* %retval, !dbg !27\l  ret i32 %5, !dbg !27\l}"];
 }

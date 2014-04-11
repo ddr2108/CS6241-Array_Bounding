@@ -10,6 +10,7 @@
 #include "llvm/DebugInfo.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/IR/Dominators.h"
 #include <map>
 #include <set>
 #include <queue>
@@ -39,6 +40,7 @@ namespace {
 
 		//Run for each function
 		virtual bool runOnFunction(Function &F){
+
 			//Information about structure of program
 			std::map<BasicBlock*, int> basicBlockIndex;
 			std::map<int, BasicBlock*> basicBlockReverseIndex;
@@ -182,6 +184,7 @@ namespace {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			std::map<std::vector<int>, int> hashTable;		//hold relation between expression and id
 			std::map<int, std::vector<int> > reverseHashTable;		//hold relation between expression and id
+			std::map<std::vector<int>, BasicBlock*> hashTableBlock;		//hold relation between expression and id
 
 			std::map<std::set<defInstruct*>, int> phiTable;		//hold relation between phi expression and phi id
 
@@ -189,7 +192,10 @@ namespace {
 			std::map<int, std::vector<Value*> > reverseValueID;		//id to memory locations
 
 
-
+			//Get Dominator info
+			DominatorTreeBase<BasicBlock> *dominatorTree;
+			dominatorTree = new DominatorTreeBase<BasicBlock>(false);
+			dominatorTree->recalculate(F);
 
 			//Queue of blocks
 			set<BasicBlock*> visited;
@@ -242,7 +248,6 @@ namespace {
 								int deleteFlag = 0;	//flag to hold info about deletions
 								int sizeFlag = 0;	//flag to hold info about size
 
-								errs()<<curInstComboID[0]<<curInstComboID[1]<<curInstComboID[2]<<curInstComboID.size()<<"\n";
 								//Reorganize elements to ensure that similar expression get same value #
 								if (curInstComboID.size()==3){
 
@@ -255,12 +260,12 @@ namespace {
 									}
 								}
 
-
 								//Check Hash table to see if already exists
 								if (hashTable[curInstComboID]!=0){		//already in hash table
 									curID = hashTable[curInstComboID];
 									deleteFlag = 1;
 								}else{							//not in table
+									hashTableBlock[curInstComboID] = block;
 									curID = ID++;	//Increment ID
 								}
 
@@ -270,7 +275,7 @@ namespace {
 								}
 
 
-								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0){
+								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0 && dominatorTree->dominates(hashTableBlock[curInstComboID],block)){
 	
 									//Create new instructions as replacements
 									StoreInst* storeInstWithValue = dyn_cast<StoreInst>(reverseValueID[curID][0]);		
@@ -444,7 +449,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////DEBUG////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-/**/
+/*
 			//Print Hash Table
 			errs()<<"Hash Table\n";
 			for (std::map<std::vector<int>, int>::iterator itr = hashTable.begin(); itr != hashTable.end(); ++itr){
@@ -466,7 +471,7 @@ namespace {
 				}
 				errs()<<"\n";
 			}
-/*
+*//*
 			//Print out resulting assembly
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
        				errs()<<*i<<'\n';
