@@ -6,6 +6,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/DebugInfo.h"
+#include "llvm/Analysis/Dominators.h"
 #include <map>
 #include <set>
 #include <queue>
@@ -39,6 +40,8 @@ namespace
 		map<BasicBlock*, Output* > inSet;
 		map<BasicBlock*, set<BasicBlock*> > pred;
 		map<BasicBlock*, map<Value*, state> > stateChanges;
+
+		map<BasicBlock*, BasicBlock*> original;
 
 		state getState(StoreInst* inst)
 		{
@@ -248,12 +251,14 @@ namespace
 					}
 				}
 
-				for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
-				{
-					gen->erase(remItr->first);
-					remItr->first->replaceAllUsesWith(remItr->second);
-					remItr->first->eraseFromParent();
-				}
+				//In the 3 step of the algorithm, we remove instructions that are redundant
+				if(doRemove)
+					for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
+					{
+						gen->erase(remItr->first);
+						remItr->first->replaceAllUsesWith(remItr->second);
+						remItr->first->eraseFromParent();
+					}
 
 				if(!conflict) S->insert(*itr);
 			}
@@ -343,7 +348,7 @@ namespace
 
 				visited.insert(block);
 
-				set<Value*>* forward = backwards(inset, block);
+				set<Value*>* forward = backwards(inset, block, true);
 
 				//Calculate OUT
 				outset->outSet.clear();
@@ -378,6 +383,8 @@ namespace
 			for(set<BasicBlock*>::iterator itr = term->begin(); itr != term->end(); itr++)
 				toVisit.push(*itr);
 			set<BasicBlock*> visited;
+
+			DominatorTree &domTree = getAnalysis<DominatorTree>();
 
 			while(!toVisit.empty())
 			{
@@ -478,7 +485,22 @@ namespace
 				{
 					inset->outSet.insert(*itr);
 					inset->outSrc[*itr] = block;
+
+					//Create an extra redundant check in this block
+					ICmpInst* cmp = dyn_cast<ICmpInst>(*itr);
+					TerminatorInst* term = block->getTerminator();
+
+					Instruction* cmpOp1 = dyn_cast<Instruction>(cmp->getOperand(0));
+					Instruction* cmpOp2 = dyn_cast<Instruction>(cmp->getOperand(1));
+
+					if((cmpOp1 == NULL || domTree.dominates( cmpOp1, original[block])) && ( cmpOp2 == NULL || domTree.dominates(cmpOp2, original[block])))
+					{
+						errs() << *cmpOp1 << " -> " << original[block]->getName() << "\n";
+						ICmpInst* boundCheck =  new ICmpInst(term, cmp->getPredicate(), cmp->getOperand(0), cmp->getOperand(1), Twine("CmpBusy"));
+						gen->insert(boundCheck);
+					}
 				}
+
 				//errs() << "Gen size: " << gen->size() << "\n";
 				errs() << "InSet size: " << inset->outSet.size() << "\n-------------------------\n";
 
@@ -510,6 +532,9 @@ namespace
 				//Get next block
 				BasicBlock* block = nextBlocks.front();
 				nextBlocks.pop();
+
+				if(original[block] == NULL)
+					original[block] = block;
 
 				//If already have gone to this block, skip it
 				if(visited.find(block) != visited.end()) continue;
@@ -566,17 +591,20 @@ namespace
 								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
 								ReturnInst::Create(block->getContext(), 
 									ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
+								original[errorBlock] = block;
 
 									
 								//Check to see if the index is less than the size
 								ICmpInst* upperBoundCheck =  new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), sizeArray, Twine("CmpTestUpper"));
 								c_gen->insert(upperBoundCheck);
 								BasicBlock* followingBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
+								original[followingBlock] = block;
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
 								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
+								original[secondCheckBlock] = block;
 								c_gen = new set<Value*>();
 								genSet[secondCheckBlock] = c_gen;
 								c_gen->insert(lowerBoundCheck);
@@ -705,9 +733,9 @@ namespace
 					}
 				}
 			
-			}
+			}//*/
 
-			//calculateSets(&lastBlock);
+			calculateSets(&lastBlock);
 			calculateRedundant(&F.getEntryBlock());
 
 
@@ -718,6 +746,12 @@ namespace
 
 
 			return false;
+		}
+
+		void getAnalysisUsage(AnalysisUsage &AU) const
+		{
+			AU.addRequired<DominatorTree>();
+			//AU.addPreserved<DominatorTree>();
 		}
 	};
 
