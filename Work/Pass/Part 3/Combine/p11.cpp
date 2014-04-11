@@ -59,6 +59,7 @@ namespace {
 			std::map<int, BasicBlock*> basicBlockReverseIndex;
 			std::map<Instruction*, int> instructionIndex;
 			std::map<int, defInstruct*> instructionDefIndex;
+			std::map<Instruction*, int> instructionDefInstrIndex;
 
 			int *dist = NULL;						//Hold distance between any two blocks
 			int* reachDef = NULL;						//Hold reaching def for each instruction
@@ -590,11 +591,15 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////GVN////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//Information about structure of program
+			int simplifiedFlag = 1;
+		while(simplifiedFlag){
+			simplifiedFlag = 0;
+			//Information about structure of program
 			basicBlockIndex.clear();
 			basicBlockReverseIndex.clear();
 			instructionIndex.clear();
 			instructionDefIndex.clear();
+			instructionDefInstrIndex.clear();
 
 			std::map<int, Instruction*> instructionReverseIndex;
 
@@ -613,7 +618,7 @@ namespace {
 				instructionLists.insert(instructionLists.end(), &*i);
 
 				//Get line number
-				unsigned int line;
+				unsigned int line = 0;
 				MDNode *N = i->getMetadata("dbg");
 				if (N) {
 					DILocation Loc(N);                     
@@ -621,10 +626,11 @@ namespace {
 				}
 
 				//Store data about variables in list - include line number, variable name, and actual instr
-				if (i->getOpcode()==28 && N && i->getOperand(1)->getName()!=""){
+				if (i->getOpcode()==28 && i->getOperand(1)->getName()!=""){
 					//Insert information about instruction
 					defInstruct* curInstuction = new defInstruct(i->getOperand(1)->getName(), numInst, line);
-					instructionDefIndex[numDef++] = curInstuction;
+					instructionDefIndex[numDef] = curInstuction;
+					instructionDefInstrIndex[&*i] = numDef++;
 				}
 				
 				//Store index number of instruction
@@ -800,7 +806,6 @@ namespace {
 
 								//Reorganize elements to ensure that similar expression get same value #
 								if (curInstComboID.size()==3){
-
 									sizeFlag = 1;
 									//Smaller number first
 									if (curInstComboID[0]>curInstComboID[1]){
@@ -827,25 +832,44 @@ namespace {
 
 								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0 && dominatorTree->dominates(hashTableBlock[curInstComboID],block)){
 	
-									//Create new instructions as replacements
-									StoreInst* storeInstWithValue = dyn_cast<StoreInst>(reverseValueID[curID][0]);		
-									LoadInst *replacementLoad = new LoadInst(storeInstWithValue->getPointerOperand(), "GVN", storeInst);
-									replacementLoad->setAlignment(4);
-									StoreInst *replacementStore = new StoreInst(replacementLoad, storeInst->getPointerOperand(), storeInst);
-									replacementStore->setAlignment(4);
-									
-									//Remove old instructions
-									i++;
-									storeInst->eraseFromParent();
-
-									if (curInstCombo.size()==3){
-										curInstCombo[2]->eraseFromParent();
+									int canReplaceFlag = 0;
+									StoreInst* storeInstWithValue;
+									for (int k = 0; k<reverseValueID[curID].size();k++){
+										//Create new instructions as replacements
+										storeInstWithValue = dyn_cast<StoreInst>(reverseValueID[curID][k]);
+										if (storeInstWithValue){
+											int defIndex = instructionDefInstrIndex[storeInstWithValue];	
+											int curIndex = instructionIndex[storeInst];
+											if (reachDef[curIndex*numDef+defIndex]>0){
+												canReplaceFlag = 1;
+												break;
+											}
+										}		
 									}
-									curInstCombo[1]->eraseFromParent();	
-									curInstCombo[0]->eraseFromParent();	
 
-									//change pointers for ease of use
-									storeInst = replacementStore;
+									if (canReplaceFlag){
+										LoadInst *replacementLoad = new LoadInst(storeInstWithValue->getPointerOperand(), "GVN", storeInst);
+										replacementLoad->setAlignment(4);
+										StoreInst *replacementStore = new StoreInst(replacementLoad, storeInst->getPointerOperand(), storeInst);
+										replacementStore->setAlignment(4);
+									
+										//Remove old instructions
+										i++;
+										storeInst->eraseFromParent();
+
+										if (curInstCombo.size()==3){
+											curInstCombo[2]->eraseFromParent();
+										}
+										curInstCombo[1]->eraseFromParent();	
+										curInstCombo[0]->eraseFromParent();	
+
+										//change pointers for ease of use
+										storeInst = replacementStore;
+
+										simplifiedFlag = 1;
+									}else{
+										curID = ID++;
+									}
 								}
 
 								//Insert into ValueID table
@@ -878,7 +902,9 @@ namespace {
 							//Check if phi instruction needed
 							std::set<defInstruct*> phiSet;
 							defInstruct* firstReaching;
+
 							for (int j = 0; j< numDef;j++){
+
 								//Find all reaching for same var
 								int reachDefIndex = instructionIndex[loadInst];
 								if (reachDef[reachDefIndex*numDef + j]==1 && allocValue->getName()==instructionDefIndex[j]->def){
@@ -940,7 +966,6 @@ namespace {
 										valChecked = phiTable[phiSet];
 									}
 								}else{		//not needed
-//errs()<<firstReaching->instructNum<<"\n";
 									valChecked = valueID[instructionReverseIndex[firstReaching->instructNum]];
 								}
 							}
@@ -1066,6 +1091,8 @@ namespace {
 
 
 			}
+
+		}
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			//Print Hash Table
 /*			errs()<<"Hash Table\n";
@@ -1084,10 +1111,12 @@ namespace {
 				if (isa<Constant>(itr->first)){
 			   		errs() <<*itr->first;
 				}else{
-			   		errs() <<itr->first->getName();
+					if (Instruction* inst = dyn_cast<Instruction>(itr->first))
+			   			errs() <<*inst;
 				}
 				errs()<<"\n";
 			}
+
 
 			//Print out resulting assembly
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
