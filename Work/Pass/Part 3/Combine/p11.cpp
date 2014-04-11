@@ -76,8 +76,9 @@ namespace {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////INITIALIZE////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			int cloningFlag = 1;		
-			
+			int cloningFlag = 1;
+			int numBlock;		
+		
 		while (cloningFlag == 1){
 
 			//Reset Flag
@@ -102,7 +103,7 @@ namespace {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////DISTANCE BETWEEN BLOCKS///////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-			int numBlock = 0;	//Number of blocks
+			numBlock = 0;	//Number of blocks
 
 			//Get list of basic blocks			
 			Function::BasicBlockListType &allblocks = F.getBasicBlockList();
@@ -597,8 +598,8 @@ namespace {
 		while(simplifiedFlag){
 			simplifiedFlag = 0;
 			//Information about structure of program
-			basicBlockIndex.clear();
-			basicBlockReverseIndex.clear();
+			//basicBlockIndex.clear();
+			//basicBlockReverseIndex.clear();
 			instructionIndex.clear();
 			instructionDefIndex.clear();
 			instructionDefInstrIndex.clear();
@@ -870,9 +871,17 @@ namespace {
 										simplifiedFlag = 1;
 									}
 								}
+								//Some conditions for changing block of expression
+								else if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0){
 
-								if (deleteFlag && sizeFlag && reverseValueID[curID].size()>0 && PDT.dominates(block, hashTableBlock[curInstComboID])){
-									hashTableBlock[curInstComboID] = block;
+									if (PDT.dominates(block, hashTableBlock[curInstComboID])){
+										hashTableBlock[curInstComboID] = block;
+									}
+									int srcBlock = basicBlockIndex[hashTableBlock[curInstComboID]];
+									int destBlock = basicBlockIndex[block]; 
+									if (dist[srcBlock*numBlock + destBlock]>=10000000){
+										hashTableBlock[curInstComboID] = block;
+									}
 								}
 
 								//Insert into ValueID table
@@ -910,7 +919,7 @@ namespace {
 
 								//Find all reaching for same var
 								int reachDefIndex = instructionIndex[loadInst];
-								if (reachDef[reachDefIndex*numDef + j]==1 && allocValue->getName()==instructionDefIndex[j]->def){
+								if (reachDef[reachDefIndex*numDef + j]>0 && allocValue->getName()==instructionDefIndex[j]->def){
 									phiSet.insert(instructionDefIndex[j]);
 									firstReaching = instructionDefIndex[j];
 								}
@@ -953,7 +962,7 @@ namespace {
 									LoadInst* loadInst = dyn_cast<LoadInst>(compareInst->getOperand(0));
 									//Find all reaching for same var
 									int reachDefIndex = instructionIndex[compareInst];
-									if (reachDef[reachDefIndex*numDef + j]==1 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
+									if (reachDef[reachDefIndex*numDef + j]>0 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
 										phiSet.insert(instructionDefIndex[j]);
 										firstReaching = instructionDefIndex[j];
 
@@ -984,7 +993,7 @@ namespace {
 									LoadInst* loadInst = dyn_cast<LoadInst>(compareInst->getOperand(1));
 									//Find all reaching for same var
 									int reachDefIndex = instructionIndex[compareInst];
-									if (reachDef[reachDefIndex*numDef + j]==1 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
+									if (reachDef[reachDefIndex*numDef + j]>0 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
 										phiSet.insert(instructionDefIndex[j]);
 										firstReaching = instructionDefIndex[j];
 									}
