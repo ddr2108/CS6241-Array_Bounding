@@ -1,0 +1,36 @@
+digraph "CFG for 'main' function" {
+	label="CFG for 'main' function";
+
+	Node0x1e4ac90 [shape=record,label="{entry:\l  %retval = alloca i32, align 4\l  %d = alloca i32, align 4\l  %z = alloca i32, align 4\l  %k = alloca i32, align 4\l  %l = alloca i32, align 4\l  store i32 0, i32* %retval\l  call void @llvm.dbg.declare(metadata !\{i32* %d\}, metadata !12), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %z\}, metadata !14), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %k\}, metadata !15), !dbg !13\l  call void @llvm.dbg.declare(metadata !\{i32* %l\}, metadata !16), !dbg !13\l  store i32 15, i32* %d, align 4, !dbg !17\l  store i32 15, i32* %z, align 4, !dbg !18\l  %0 = load i32* %z, align 4, !dbg !19\l  %add = add nsw i32 10, %0, !dbg !19\l  store i32 %add, i32* %d, align 4, !dbg !19\l  %GVN = load i32* %d, align 4\l  store i32 %GVN, i32* %z, align 4\l  store i32 8, i32* %k, align 4, !dbg !20\l  store i32 9, i32* %l, align 4, !dbg !21\l  %1 = load i32* %d, align 4, !dbg !22\l  %add2 = add nsw i32 %1, 5, !dbg !22\l  store i32 %add2, i32* %k, align 4, !dbg !22\l  store i32 3, i32* %d, align 4, !dbg !23\l  %2 = load i32* %z, align 4, !dbg !24\l  %cmp = icmp sgt i32 %2, 5, !dbg !24\l  br i1 %cmp, label %if.then, label %if.else, !dbg !24\l|{<s0>T|<s1>F}}"];
+	Node0x1e4ac90:s0 -> Node0x1e4acf0;
+	Node0x1e4ac90:s1 -> Node0x1e4ad50;
+	Node0x1e4acf0 [shape=record,label="{if.then:                                          \l  store i32 25, i32* %d, align 4, !dbg !26\l  br label %if.end, !dbg !28\l}"];
+	Node0x1e4acf0 -> Node0x1e4adb0;
+	Node0x1e4ad50 [shape=record,label="{if.else:                                          \l  store i32 9, i32* %d, align 4, !dbg !29\l  br label %if.endclone\l}"];
+	Node0x1e4ad50 -> Node0x1e72e40;
+	Node0x1e4adb0 [shape=record,label="{if.end:                                           \l  %3 = load i32* %z, align 4, !dbg !31\l  %cmp3 = icmp sgt i32 %3, 5, !dbg !31\l  br i1 %cmp3, label %if.then4, label %if.else5, !dbg !31\l|{<s0>T|<s1>F}}"];
+	Node0x1e4adb0:s0 -> Node0x1e4ae10;
+	Node0x1e4adb0:s1 -> Node0x1e4ae70;
+	Node0x1e4ae10 [shape=record,label="{if.then4:                                         \l  store i32 25, i32* %k, align 4, !dbg !33\l  br label %if.end6, !dbg !35\l}"];
+	Node0x1e4ae10 -> Node0x1e4aed0;
+	Node0x1e4ae70 [shape=record,label="{if.else5:                                         \l  store i32 9, i32* %k, align 4, !dbg !36\l  br label %if.end6\l}"];
+	Node0x1e4ae70 -> Node0x1e4aed0;
+	Node0x1e4aed0 [shape=record,label="{if.end6:                                          \l  %4 = load i32* %d, align 4, !dbg !38\l  %cmp7 = icmp sgt i32 %4, 5, !dbg !38\l  br i1 %cmp7, label %if.then8, label %if.else9, !dbg !38\l|{<s0>T|<s1>F}}"];
+	Node0x1e4aed0:s0 -> Node0x1e4af30;
+	Node0x1e4aed0:s1 -> Node0x1e5a4f0;
+	Node0x1e4af30 [shape=record,label="{if.then8:                                         \l  store i32 5, i32* %z, align 4, !dbg !40\l  br label %if.end10, !dbg !42\l}"];
+	Node0x1e4af30 -> Node0x1e5a550;
+	Node0x1e5a4f0 [shape=record,label="{if.else9:                                         \l  store i32 19, i32* %z, align 4, !dbg !43\l  br label %if.end10\l}"];
+	Node0x1e5a4f0 -> Node0x1e5a550;
+	Node0x1e5a550 [shape=record,label="{if.end10:                                         \l  %5 = load i32* %retval, !dbg !45\l  ret i32 %5, !dbg !45\l}"];
+	Node0x1e72e40 [shape=record,label="{if.endclone:                                      \l  %6 = load i32* %z, align 4, !dbg !31\l  %cmp3clone = icmp sgt i32 %6, 5, !dbg !31\l  br i1 %cmp3clone, label %if.then4clone, label %if.else5clone, !dbg !31\l|{<s0>T|<s1>F}}"];
+	Node0x1e72e40:s0 -> Node0x1e73100;
+	Node0x1e72e40:s1 -> Node0x1e73320;
+	Node0x1e73100 [shape=record,label="{if.then4clone:                                    \l  store i32 25, i32* %k, align 4, !dbg !33\l  br label %if.end6clone, !dbg !35\l}"];
+	Node0x1e73100 -> Node0x1e736a0;
+	Node0x1e73320 [shape=record,label="{if.else5clone:                                    \l  store i32 9, i32* %k, align 4, !dbg !36\l  br label %if.end6clone\l}"];
+	Node0x1e73320 -> Node0x1e736a0;
+	Node0x1e736a0 [shape=record,label="{if.end6clone:                                     \l  %7 = load i32* %d, align 4, !dbg !38\l  %cmp7clone = icmp sgt i32 %7, 5, !dbg !38\l  br i1 %cmp7clone, label %if.then8, label %if.else9, !dbg !38\l|{<s0>T|<s1>F}}"];
+	Node0x1e736a0:s0 -> Node0x1e4af30;
+	Node0x1e736a0:s1 -> Node0x1e5a4f0;
+}
