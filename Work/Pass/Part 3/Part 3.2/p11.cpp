@@ -362,18 +362,86 @@ namespace {
 						}
 						//Compare instruction
 						if (ICmpInst* compareInst = dyn_cast<ICmpInst>(i)){
-/*							int valChecked = valueID[compareInst->getOperand(0)];	//get the value being checked
-							int bound = valueID[compareInst->getOperand(1)];		//get the bound compared
+							int valChecked = 0; 
+							
+							if (isa<Constant>(compareInst->getOperand(0))){
+								valChecked = valueID[compareInst->getOperand(0)];	//get the value being checked
+							}else{
+								//Check if phi instruction needed
+								std::set<defInstruct*> phiSet;
+								defInstruct* firstReaching;
+								for (int j = 0; j< numDef;j++){
+									LoadInst* loadInst = dyn_cast<LoadInst>(compareInst->getOperand(0));
+									//Find all reaching for same var
+									int reachDefIndex = instructionIndex[compareInst];
+									if (reachDef[reachDefIndex*numDef + j]==1 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
+										phiSet.insert(instructionDefIndex[j]);
+										firstReaching = instructionDefIndex[j];
+
+									}
+								}
+								//Check if there are multiple reaching and thus phi needed
+								if (phiSet.size()>1){		//needed
+									//check if arleady exists
+									if (phiTable[phiSet]==0){	//not in
+										phiTable[phiSet] = phiID;
+										valChecked = phiID--;
+									}else{	//int
+										valChecked = phiTable[phiSet];
+									}
+								}else{		//not needed
+//errs()<<firstReaching->instructNum<<"\n";
+									valChecked = valueID[instructionReverseIndex[firstReaching->instructNum]];
+								}
+							}
+
+							int bound = 0; 
+							if (isa<Constant>(compareInst->getOperand(1))){
+								bound = valueID[compareInst->getOperand(1)];		//get the bound compared
+							}else{
+								//Check if phi instruction needed
+								std::set<defInstruct*> phiSet;
+								defInstruct* firstReaching;
+								for (int j = 0; j< numDef;j++){
+									LoadInst* loadInst = dyn_cast<LoadInst>(compareInst->getOperand(1));
+									//Find all reaching for same var
+									int reachDefIndex = instructionIndex[compareInst];
+									if (reachDef[reachDefIndex*numDef + j]==1 && loadInst->getOperand(0)->getName()==instructionDefIndex[j]->def){
+										phiSet.insert(instructionDefIndex[j]);
+										firstReaching = instructionDefIndex[j];
+									}
+								}
+								//Check if there are multiple reaching and thus phi needed
+								if (phiSet.size()>1){		//needed
+									//check if arleady exists
+									if (phiTable[phiSet]==0){	//not in
+										phiTable[phiSet] = phiID;
+										bound = phiID--;
+									}else{	//int
+										bound = phiTable[phiSet];
+									}
+								}else{		//not needed
+									bound = valueID[instructionReverseIndex[firstReaching->instructNum]];
+								}
+							}
+
 							llvm::CmpInst::Predicate comparison = compareInst->getSignedPredicate();// equality
-						
+
 							//Try combo of values to see if a particular variation reaches
+							//if (bound > 0 && valChecked > 0)
 							for (std::vector<Value*>::iterator itr = reverseValueID[valChecked].begin(); itr != reverseValueID[valChecked].end(); ++itr){
 								for (std::vector<Value*>::iterator it = reverseValueID[bound].begin(); it != reverseValueID[bound].end(); ++it){
-									ICmpInst* testCheck =  new ICmpInst(compareInst, comparison,*itr, *it, Twine("Test"));
-									if (1){
+									StoreInst* storeITR = dyn_cast<StoreInst>(*itr);
+									StoreInst* storeIT = dyn_cast<StoreInst>(*it);
+									LoadInst *loadITR = new LoadInst(storeITR->getOperand(1), "ITR", compareInst);
+									LoadInst *loadIT = new LoadInst(storeIT->getOperand(1), "IT", compareInst);
+									ICmpInst* testCheck =  new ICmpInst(compareInst, comparison,loadITR, loadIT, Twine("Test"));
+									if (0){
 										//if there is a match, remove compare instruction and branch
 										testCheck->eraseFromParent();	//Erase instruction
 										compareInst->eraseFromParent();	//Erase instruction
+										loadITR->eraseFromParent();
+										loadIT->eraseFromParent();
 
 										//Go to next instruction and check if 
 										i++;
@@ -406,9 +474,11 @@ namespace {
 									}else{
 										//if there is no match, just erase the new instruction
 										testCheck->eraseFromParent();
+										loadITR->eraseFromParent();
+										loadIT->eraseFromParent();
 									}
 								}
-							}*/
+							}
 						}
 
 						if (i->isBinaryOp()){		//binary operation - add, sub, etc.
