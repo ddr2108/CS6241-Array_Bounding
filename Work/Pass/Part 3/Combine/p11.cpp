@@ -852,14 +852,16 @@ namespace {
 										if (storeInstWithValue){
 											int defIndex = instructionDefInstrIndex[storeInstWithValue];	
 											int curIndex = instructionIndex[storeInst];
+errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+defIndex]<<"\n";
 											if (reachDef[curIndex*numDef+defIndex]>0){
+
 												canReplaceFlag = 1;
 												break;
 											}
 										}		
 									}
 
-									if (canReplaceFlag){
+									if (canReplaceFlag && simplifiedFlag == 0){
 										LoadInst *replacementLoad = new LoadInst(storeInstWithValue->getPointerOperand(), "GVN", storeInst);
 										replacementLoad->setAlignment(4);
 										StoreInst *replacementStore = new StoreInst(replacementLoad, storeInst->getPointerOperand(), storeInst);
