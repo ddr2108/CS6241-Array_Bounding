@@ -115,6 +115,136 @@ namespace
 			return retn;
 		}
 
+		bool compareValues(Value* itr, Value* localItr, map<Instruction*, Instruction*> &toRemove, BasicBlock* block)
+		{
+			//Make sure they aren't the same instruction
+			if(itr == localItr) return false;
+
+			CmpInst* inst = dyn_cast<CmpInst>(itr);
+
+			//errs() << gen->size() << "\n";
+			bool conflict = false;
+
+			Value* op1 = getBaseValue(inst->getOperand(0));
+			Value* op2 = getBaseValue(inst->getOperand(1));
+
+			state changeStateOp1 = stateChanges[block][op1];
+			state changeStateOp2 = stateChanges[block][op2];
+
+			//See if this block killed one of the compare's operands
+			if(changeStateOp1 != UNCHANGED || changeStateOp2 != UNCHANGED)
+			{
+				errs() << changeStateOp1 << " :: " << changeStateOp2 << "\n";
+				switch(changeStateOp1)
+				{
+				case UNKNOWN:
+					conflict = true;
+					break;
+				case INCREASED:
+					if(inst->getPredicate() == CmpInst::ICMP_SLT)
+					{
+						errs() << "Killing upper\n";
+						conflict = true;
+					}
+					break;
+				case DECREASED:
+					if(inst->getPredicate() == CmpInst::ICMP_SGT)
+					{
+						errs() << "Killing lower\n";
+						conflict = true;
+					}
+					break;
+				}
+			}
+
+			CmpInst* localInst = dyn_cast<CmpInst>(localItr);
+
+			Value* localOp1 = getBaseValue(localInst->getOperand(0));
+			Value* localOp2 = getBaseValue(localInst->getOperand(1));
+
+			errs() << *localInst << " vs " << *inst << "\n";
+			errs() << *op1 << " vs " << *localOp1 << "\n";
+
+			//Oper 0 is what the index is
+			//Oper 1 is the bound we are checking
+
+			//Are we checking the same variable
+			bool equalConst = false;
+			ConstantInt* localConst = dyn_cast<ConstantInt>(localInst->getOperand(0));
+			ConstantInt* prevConst = dyn_cast<ConstantInt>(inst->getOperand(0));
+
+			//We count equivalent constants as being the same variable
+			if(localConst != NULL && prevConst != NULL)
+			{
+				errs() << localConst->getZExtValue() << "\n";
+				if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
+			}
+
+			if(localOp1 == op1 || equalConst)
+			{
+				if(localInst->getPredicate() == inst->getPredicate())
+				{
+					localConst = dyn_cast<ConstantInt>(localOp2);
+					prevConst = dyn_cast<ConstantInt>(op2);
+
+
+					if(localOp2 == op2)
+					{
+						errs() << "Matching = " << *localInst << "\n";
+						toRemove[localInst] = inst;
+					}
+					else if(localInst->getPredicate() == CmpInst::ICMP_SLT)
+					{
+						errs() << "SLT\n";
+						if(localConst == NULL) conflict = true;
+						else if(prevConst == NULL) conflict = true;
+						else if(prevConst->uge(localConst->getZExtValue()));
+						else conflict = true;
+					}
+					else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
+					{
+						errs() << "SGT\n";
+						if(localConst == NULL) conflict = true;
+						else if(prevConst == NULL) conflict = true;
+						else if(localConst->uge(prevConst->getZExtValue()));
+						else conflict = true;
+					}
+					else
+					{
+						errs() << "Conflict\n";
+						conflict = true;
+					}
+				}
+			}
+			else if(localInst->getOperand(1) == inst->getOperand(1))
+			{
+				if(localInst->getPredicate() == CmpInst::ICMP_SLT)
+				{
+					errs() << "SLT\n";
+					if(localConst == NULL) conflict = true;
+					else if(prevConst == NULL) conflict = true;
+					else if(prevConst->uge(localConst->getZExtValue()))
+					{
+						toRemove[localInst] = inst;
+					}
+					else conflict = true;
+				}
+				else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
+				{
+					errs() << "SGT\n";
+					if(localConst == NULL) conflict = true;
+					else if(prevConst == NULL) conflict = true;
+					else if(localConst->uge(prevConst->getZExtValue()))
+					{
+						toRemove[localInst] = inst;
+					}
+					else conflict = true;
+				}
+			}
+
+			return conflict;
+		}
+
 		set<Value*>* backwards(Output* output, BasicBlock* block, bool doRemove=false)
 		{
 			set<Value*>* S = new set<Value*>();
@@ -125,130 +255,11 @@ namespace
 			//O(n^2) loop to check for matching compares
 			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
 			{
-				CmpInst* inst = dyn_cast<CmpInst>(*itr);
-
-				//errs() << gen->size() << "\n";
-				bool conflict = false;
 				map<Instruction*, Instruction*> toRemove;
-
-				Value* op1 = getBaseValue(inst->getOperand(0));
-				Value* op2 = getBaseValue(inst->getOperand(1));
-
-				state changeStateOp1 = stateChanges[block][op1];
-				state changeStateOp2 = stateChanges[block][op2];
-
-				//See if this block killed one of the compare's operands
-				if(changeStateOp1 != UNCHANGED || changeStateOp2 != UNCHANGED)
-				{
-					errs() << changeStateOp1 << " :: " << changeStateOp2 << "\n";
-					switch(changeStateOp1)
-					{
-					case UNKNOWN:
-						conflict = true;
-						break;
-					case INCREASED:
-						if(inst->getPredicate() == CmpInst::ICMP_SLT)
-						{
-							errs() << "Killing upper\n";
-							conflict = true;
-						}
-						break;
-					case DECREASED:
-						if(inst->getPredicate() == CmpInst::ICMP_SGT)
-						{
-							errs() << "Killing lower\n";
-							conflict = true;
-						}
-						break;
-					}
-				}
-
+				bool conflict = false;
 				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
 				{
-					CmpInst* localInst = dyn_cast<CmpInst>(*localItr);
-
-					Value* localOp1 = getBaseValue(localInst->getOperand(0));
-					Value* localOp2 = getBaseValue(localInst->getOperand(1));
-
-					errs() << *localInst << " vs " << *inst << "\n";
-					errs() << *op1 << " vs " << *localOp1 << "\n";
-
-					//Oper 0 is what the index is
-					//Oper 1 is the bound we are checking
-
-					//Are we checking the same variable
-					bool equalConst = false;
-					ConstantInt* localConst = dyn_cast<ConstantInt>(localInst->getOperand(0));
-					ConstantInt* prevConst = dyn_cast<ConstantInt>(inst->getOperand(0));
-
-					//We count equivalent constants as being the same variable
-					if(localConst != NULL && prevConst != NULL)
-					{
-						errs() << localConst->getZExtValue() << "\n";
-						if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
-					}
-
-					if(localOp1 == op1 || equalConst)
-					{
-						if(localInst->getPredicate() == inst->getPredicate())
-						{
-							localConst = dyn_cast<ConstantInt>(localOp2);
-							prevConst = dyn_cast<ConstantInt>(op2);
-
-
-							if(localOp2 == op2)
-							{
-								errs() << "Matching = " << *localInst << "\n";
-								toRemove[localInst] = inst;
-							}
-							else if(localInst->getPredicate() == CmpInst::ICMP_SLT)
-							{
-								errs() << "SLT\n";
-								if(localConst == NULL) conflict = true;
-								else if(prevConst == NULL) conflict = true;
-								else if(prevConst->uge(localConst->getZExtValue()));
-								else conflict = true;
-							}
-							else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
-							{
-								errs() << "SGT\n";
-								if(localConst == NULL) conflict = true;
-								else if(prevConst == NULL) conflict = true;
-								else if(localConst->uge(prevConst->getZExtValue()));
-								else conflict = true;
-							}
-							else
-							{
-								errs() << "Conflict\n";
-								conflict = true;
-							}
-						}
-					}
-					else if(localInst->getOperand(1) == inst->getOperand(1))
-					{
-						if(localInst->getPredicate() == CmpInst::ICMP_SLT)
-						{
-							errs() << "SLT\n";
-							if(localConst == NULL) conflict = true;
-							else if(prevConst == NULL) conflict = true;
-							else if(prevConst->uge(localConst->getZExtValue()))
-							{
-								toRemove[localInst] = inst;
-							}
-							else conflict = true;
-						}
-						else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
-						{
-							errs() << "SGT\n";
-							if(localConst == NULL) conflict = true;
-							else if(prevConst == NULL) conflict = true;
-							else if(localConst->uge(prevConst->getZExtValue()))
-							{
-								toRemove[localInst] = inst;
-							}
-							else conflict = true;
-						}
-					}
+					conflict |= compareValues(*itr, *localItr, toRemove, block);
 				}
 
 				//In the 3 step of the algorithm, we remove instructions that are redundant
@@ -354,12 +365,36 @@ namespace
 				outset->outSet.clear();
 				outset->outSrc.clear();
 
-				//Add gen
+				map<Instruction*, Instruction*> toRemove;
+				//Add gen, while removing duplicate gen vars
 				for(set<Value*>::iterator itr = gen->begin(); itr != gen->end(); itr++)
 				{
-					outset->outSet.insert(*itr);
-					outset->outSrc[*itr] = block;
+					bool duplicate = false;
+					for(set<Value*>::iterator itr2 = gen->begin(); itr2 != itr; itr2++)
+					{
+						bool isDup = compareValues(*itr, *itr2, toRemove, block);
+						duplicate |= isDup;
+					}
+
+					//if(!duplicate)
+					{
+						outset->outSet.insert(*itr);
+						outset->outSrc[*itr] = block;
+					}
 				}
+				//Remove the redundant gen statements
+				for(map<Instruction*, Instruction*>::iterator itr = toRemove.begin(); itr != toRemove.end(); itr++)
+				{
+					errs() << "REMOVE: " << *itr->first << "\n";
+					gen->erase(itr->first);
+					itr->first->replaceAllUsesWith(itr->second);
+					itr->first->eraseFromParent();
+
+					outset->outSet.erase(itr->first);
+					outset->outSrc.erase(itr->first);
+				}
+
+
 				//Add forward set
 				for(set<Value*>::iterator itr = forward->begin(); itr != forward->end(); itr++)
 				{
