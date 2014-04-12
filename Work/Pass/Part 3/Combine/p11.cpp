@@ -779,12 +779,22 @@ namespace {
 				std::vector<int> curInstComboID;
 				std::vector<Instruction*> curInstCombo;
 
+				int isArrayFlag = 0;
 				//Visit the instructions
 				for(BasicBlock::iterator i = block->begin(), ei = block->end(); i != ei; ++i){
 					//if it is a store instruction
 					if ((&*i)!=NULL){
+						if (GetElementPtrInst* getInst = dyn_cast<GetElementPtrInst>(i)){
+							isArrayFlag = 1;
+							continue;
+						}
 						if (StoreInst* storeInst = dyn_cast<StoreInst>(i)){
 							if(storeInst->getPointerOperand()->getName()!=""){
+								if (isArrayFlag == 1){
+									isArrayFlag = 0;
+									continue;
+								}
+
 								//If value store is a constant
 								if (isa<Constant>(storeInst->getValueOperand())){
 
