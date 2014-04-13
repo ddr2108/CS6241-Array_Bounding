@@ -216,7 +216,7 @@ namespace
 					}
 				}
 			}
-			else if(localInst->getOperand(1) == inst->getOperand(1))
+			/*else if(localInst->getOperand(1) == inst->getOperand(1))
 			{
 				if(localInst->getPredicate() == CmpInst::ICMP_SLT)
 				{
@@ -240,7 +240,7 @@ namespace
 					}
 					else conflict = true;
 				}
-			}
+			}*/
 
 			return conflict;
 		}
@@ -717,6 +717,10 @@ namespace
 
 			}
 
+			//Optimize bounds checks
+			calculateSets(&lastBlock);
+			calculateRedundant(&F.getEntryBlock());
+
 			//Queue of blocks
 			nextBlocks.push(&F.getEntryBlock());
 			visited.clear();
@@ -732,47 +736,33 @@ namespace
 
 				//Visit the instructions
 				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++){
-					if (BranchInst* branchAfterCheck = dyn_cast<BranchInst>(inst)){
-						if (branchAfterCheck->getNumSuccessors()==2){
-
-							BasicBlock *nextBlock = branchAfterCheck->getSuccessor(0);
-							BasicBlock *errorBlock = branchAfterCheck->getSuccessor(1);
-
-							int deleteBlock = 0;
-							if (errorBlock->getSinglePredecessor()){
-								deleteBlock = 1;		
-							}
-
-							BranchInst::Create(nextBlock, branchAfterCheck->getParent());
-							branchAfterCheck->eraseFromParent(); //Remove the
-
-							//if exit block only has 1 predecessor
-							if (deleteBlock){
-								lastBlock.erase(errorBlock);
-								errorBlock->eraseFromParent();
-							}
-							
-							//Add to block to examine and go to next block
-							nextBlocks.push(nextBlock);
-							break;
-						}
-
-					}
-
 					//add new blocks to go to
 					if(TerminatorInst* termInst = dyn_cast<TerminatorInst>(inst)){
 						int numSucc = termInst->getNumSuccessors();
-						for(int i = 0; i < numSucc; i++){
-							nextBlocks.push(termInst->getSuccessor(i));
+						for(int i = 0; i < numSucc; i++)
+						{
+							BasicBlock* succ = termInst->getSuccessor(i);
+							int size = succ->getInstList().size();
+							TerminatorInst* succTerm = succ->getTerminator();
+
+							BasicBlock* succFollow = NULL;
+							if(succTerm->getNumSuccessors() > 0)
+								succFollow = succTerm->getSuccessor(0);
+
+							if(size == 1 && succTerm->getNumSuccessors() == 1 && succFollow->getSinglePredecessor())
+							{
+								termInst->setSuccessor(i, succFollow);
+								succFollow->eraseFromParent();
+								
+								nextBlocks.push(succFollow);
+							}
+							else
+								nextBlocks.push(succ);
 						}
 					}
 				}
 			
 			}//*/
-
-			calculateSets(&lastBlock);
-			calculateRedundant(&F.getEntryBlock());
-
 
 			//Print out resulting assembly
 			for(inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i){
