@@ -101,6 +101,7 @@ namespace
 			return retn;
 		}
 
+		//Finds the base value of an instruction. This means the method will skip passed cast instructions to find the original load.
 		Value* getBaseValue(Value* value)
 		{
 			Value* retn = value;
@@ -117,6 +118,7 @@ namespace
 			return retn;
 		}
 
+		//Determines whether two values are the same, and if they are the second one is added to the "toRemove" map
 		bool compareValues(Value* itr, Value* localItr, map<Instruction*, Instruction*> &toRemove, BasicBlock* block)
 		{
 			//Make sure they aren't the same instruction
@@ -184,12 +186,14 @@ namespace
 
 			if(localOp1 == op1 || equalConst)
 			{
+				//Makes sure the comparisons have the same predicate
 				if(localInst->getPredicate() == inst->getPredicate())
 				{
 					localConst = dyn_cast<ConstantInt>(localOp2);
 					prevConst = dyn_cast<ConstantInt>(op2);
 
 
+					//Checks to see if the increase/decreases are allowable depending on the predicate
 					if(localOp2 == op2)
 					{
 						errs() << "Matching = " << *localInst << "\n";
@@ -218,35 +222,11 @@ namespace
 					}
 				}
 			}
-			/*else if(localInst->getOperand(1) == inst->getOperand(1))
-			{
-				if(localInst->getPredicate() == CmpInst::ICMP_SLT)
-				{
-					errs() << "SLT\n";
-					if(localConst == NULL) conflict = true;
-					else if(prevConst == NULL) conflict = true;
-					else if(prevConst->uge(localConst->getZExtValue()))
-					{
-						toRemove[localInst] = inst;
-					}
-					else conflict = true;
-				}
-				else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
-				{
-					errs() << "SGT\n";
-					if(localConst == NULL) conflict = true;
-					else if(prevConst == NULL) conflict = true;
-					else if(localConst->uge(prevConst->getZExtValue()))
-					{
-						toRemove[localInst] = inst;
-					}
-					else conflict = true;
-				}
-			}*/
 
 			return conflict;
 		}
 
+		//Despite being called "backwards" this method is actually used for both forward and backward data flow analysis
 		set<Value*>* backwards(Output* output, BasicBlock* block, bool doRemove=false)
 		{
 			set<Value*>* S = new set<Value*>();
@@ -280,6 +260,7 @@ namespace
 			return S;
 		}
 
+		//Forward analysis. Remove redundant bound checks
 		void calculateRedundant(BasicBlock* entry)
 		{
 			queue<BasicBlock*> toVisit;
@@ -353,6 +334,7 @@ namespace
 					}
 				}
 
+				//Check if the predecessors both have outsets available. If not, wait to try again later
 				if(!isReady)
 				{
 					toVisit.push(block);
@@ -368,6 +350,7 @@ namespace
 				outset->outSrc.clear();
 
 				map<Instruction*, Instruction*> toRemove;
+
 				//Add gen, while removing duplicate gen vars
 				for(set<Value*>::iterator itr = gen->begin(); itr != gen->end(); itr++)
 				{
@@ -413,6 +396,7 @@ namespace
 			
 		}
 
+		//Find busy checks and propagate the compares upward
 		void calculateSets(set<BasicBlock*>* term)
 		{
 			queue<BasicBlock*> toVisit;
@@ -421,6 +405,7 @@ namespace
 				toVisit.push(*itr);
 			set<BasicBlock*> visited;
 
+			//Note: This dominator tree is not current, as we have added blocks/instructions
 			DominatorTree &domTree = getAnalysis<DominatorTree>();
 
 			while(!toVisit.empty())
@@ -540,9 +525,6 @@ namespace
 
 				//errs() << "Gen size: " << gen->size() << "\n";
 				errs() << "InSet size: " << inset->outSet.size() << "\n-------------------------\n";
-
-				//if(predecessors->size() > 1)
-				//errs() << "size: " << predecessors->size() << "\n";
 
 				//Add predecessors
 				for(set<BasicBlock*>::iterator itr = predecessors->begin(); itr != predecessors->end(); itr++)
