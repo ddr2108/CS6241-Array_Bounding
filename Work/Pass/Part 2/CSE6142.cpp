@@ -43,6 +43,8 @@ namespace
 
 		map<BasicBlock*, BasicBlock*> original;
 
+		BasicBlock* errorBlock;
+
 		state getState(StoreInst* inst)
 		{
 			state retn = UNCHANGED;
@@ -562,6 +564,8 @@ namespace
 
 			set<BasicBlock*> visited;
 
+			errorBlock = NULL;
+
 			//Visit until nore more blocks left
 			while(!nextBlocks.empty()){
 				//Get next block
@@ -623,10 +627,12 @@ namespace
 								//errs() << "Runtime\n";
 
 								//Create a new exit block
-								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
-								ReturnInst::Create(block->getContext(), 
-									ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
-								original[errorBlock] = block;
+								if(errorBlock == NULL)
+								{
+									errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
+									ReturnInst::Create(block->getContext(), 
+										ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
+								}
 
 									
 								//Check to see if the index is less than the size
