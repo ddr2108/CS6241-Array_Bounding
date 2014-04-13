@@ -1,23 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int main()
-{
-int d,z;
-z=7;
-if (z>5){
-	d=7;
-}else{
-	d=9;
-}
-
-z= z + 15;
-	d=d-5;
-if (z>5){
-	z=7;
-}else{
-	z=9;
-/*int test(){
+int test(){
 	int size = 25;
 	int a[size];
 	bool branchIf = false;
@@ -58,10 +42,13 @@ if (z>5){
 	if(branchIf)printf("Branch");
 	x = a[30];	
 	return 1;
-}*/
+}
 
-	z = z-5;
+int main() {
 
-
+	int z = test();
+	printf("%d",z);
+	
+	return 0;
 }
 
