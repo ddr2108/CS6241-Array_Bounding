@@ -34,7 +34,6 @@ namespace
 			map<Value*, state> outState;
 		};
 
-		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
 
 		map<BasicBlock*, Output* > outputs;
@@ -575,116 +574,9 @@ namespace
 				//Visit the instructions
 				for(BasicBlock::iterator inst = block->begin(); inst != block->end(); inst++){
 
-					//if it is an allocate instruction
-					if(AllocaInst* alloc = dyn_cast<AllocaInst>(inst)){
-						//if array
-						if(alloc->isArrayAllocation()){
-							arraySizeMap[alloc] = alloc->getOperand(0);
-						}
-						
-						PointerType *pt = alloc->getType();
-						//If it is an array and the previous if statement did not catch it
-						if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())){
-							//get size							
-							int arraySize = at->getNumElements();
-#if is64
-							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 64),arraySize,false);
-#else
-							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 32),arraySize,false);
-#endif
-							//Store size
-							arraySizeMap[alloc] = newValue;
-
-
-						}
-					}
-
-					//An array element is being retrieved. We need to check if it's inbounds
-					if(&*inst != &block->front()){
-						if(GetElementPtrInst* getInst = dyn_cast<GetElementPtrInst>(inst)){
-							//Get index into array
-							int indexOperand = getInst->getNumIndices();
-							llvm::ConstantInt* CI = dyn_cast<llvm::ConstantInt>(getInst->getOperand(indexOperand));
-							
-							//Get info about array
-							Value *sizeArray = arraySizeMap[getInst->getOperand(0)];
-							llvm::ConstantInt* CI2 = dyn_cast<llvm::ConstantInt>(sizeArray);
-
-							if (CI==NULL || CI2==NULL) {		//Runtime analysis
-
-								//errs() << "Runtime\n";
-
-								//Create a new exit block
-								if(errorBlock == NULL)
-								{
-									errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
-									ReturnInst::Create(block->getContext(), 
-										ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
-								}
-
-									
-								//Check to see if the index is less than the size
-								ICmpInst* upperBoundCheck =  new ICmpInst(getInst, CmpInst::ICMP_SLT, getInst->getOperand(indexOperand), sizeArray, Twine("CmpTestUpper"));
-								c_gen->insert(upperBoundCheck);
-								BasicBlock* followingBlock = block->splitBasicBlock(inst, Twine(block->getName() + "valid"));
-								original[followingBlock] = block;
-
-								//Check to see if index is negative
-								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-#if is64
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);
-#else
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);
-#endif
-								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
-								original[secondCheckBlock] = block;
-								c_gen = new set<Value*>();
-								genSet[secondCheckBlock] = c_gen;
-								c_gen->insert(lowerBoundCheck);
-								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
-
-
-								//Modify exisiting block
-								block->getTerminator()->eraseFromParent(); //Remove the temporary terminator
-								//Add our own terminator condition
-								BranchInst::Create(secondCheckBlock, errorBlock, upperBoundCheck, block);
-
-								//nextBlocks.push(followingBlock);
-								nextBlocks.push(secondCheckBlock);
-
-								//Move all the predecessor links to the head block
-								TerminatorInst* splitTerm = followingBlock->getTerminator();
-								int numSuccessor = splitTerm->getNumSuccessors();
-								for(int i = 0; i < numSuccessor; i++)
-									if(pred[splitTerm->getSuccessor(i)].erase(block) > 0) errs() << "SDFSDF\n";
-
-								//pred[followingBlock].insert(secondCheckBlock);
-								pred[secondCheckBlock].insert(block);
-								break;
-							}else{		//Static analysis - constant size and index
-								
-								int arrayIndex = CI->getZExtValue(); 	//Pull out the array index
-								int arraySize = CI2->getZExtValue(); 	//Pull out the array index
-
-								//Check size of array vs index
-								if (arrayIndex>=arraySize || arrayIndex<0){
-
-									//Get line number
-									unsigned Line;
-									if (MDNode *N = getInst->getMetadata("dbg")) {
-										DILocation Loc(N);                     
-										Line = Loc.getLineNumber();
-									}
-
-									//Print error
-									errs()<<"Index outside of array bounds\n Line:"<<Line<<"\n Access index " <<arrayIndex<<" of array "<<getInst->getOperand(0)->getName()<<" of size "<<arraySize<<"\n\n";
-
-								}				
-
-							}
-
-						}
-
+					if(ICmpInst* cmp = dyn_cast<ICmpInst>(inst))
+					{
+						c_gen->insert(inst);
 					}
 
 					//Trace through the store instruction to see if we can determine how this value changed
