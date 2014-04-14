@@ -1,3 +1,5 @@
+#define is64 false
+
 #include "llvm/IR/Function.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/IR/Instructions.h"
@@ -24,12 +26,15 @@ namespace
 
 		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
+		BasicBlock* errorBlock;
 
 		virtual bool runOnFunction(Function &F){
 
 			//Queue of blocks
 			queue<BasicBlock*> nextBlocks;
 			nextBlocks.push(&F.getEntryBlock());
+
+			errorBlock = NULL;
 
 			//Visit until nore more blocks left
 			while(!nextBlocks.empty()){
@@ -56,7 +61,11 @@ namespace
 						if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())){
 							//get size							
 							int arraySize = at->getNumElements();
+#if is64
+							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 64),arraySize,false);
+#else
 							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 32),arraySize,false);
+#endif
 							//Store size
 							arraySizeMap[alloc] = newValue;
 
@@ -78,9 +87,12 @@ namespace
 							if (CI==NULL || CI2==NULL) {		//Runtime analysis
 
 								//Create a new exit block
-								BasicBlock* errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
-								ReturnInst::Create(block->getContext(), 
-									ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
+								if(errorBlock == NULL)
+								{
+									errorBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "exit"), &F);
+									ReturnInst::Create(block->getContext(), 
+										ConstantInt::get(IntegerType::get(block->getContext(), 32), 0), errorBlock);
+								}
 
 									
 								//Check to see if the index is less than the size
@@ -90,7 +102,11 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);												
+#if is64
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);
+#else
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);
+#endif
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
 
