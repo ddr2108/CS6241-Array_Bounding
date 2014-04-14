@@ -17,10 +17,10 @@ using std::queue;
 
 namespace
 {
-	struct CSE6142 : public FunctionPass
+	struct CreateBounds : public FunctionPass
 	{
 		static char ID;
-		CSE6142() : FunctionPass(ID){}
+		CreateBounds() : FunctionPass(ID){}
 
 		map<Value*, Value*> arraySizeMap;
 		set<BasicBlock*> visited;
@@ -56,7 +56,7 @@ namespace
 						if (ArrayType *at = dyn_cast<ArrayType>(pt->getElementType())){
 							//get size							
 							int arraySize = at->getNumElements();
-							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 64),arraySize,false);
+							ConstantInt* newValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(), 32),arraySize,false);
 							//Store size
 							arraySizeMap[alloc] = newValue;
 
@@ -90,7 +90,7 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
-								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);												
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);												
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
 								BranchInst::Create(followingBlock, errorBlock, lowerBoundCheck, secondCheckBlock);
 
@@ -149,6 +149,6 @@ namespace
 		}
 	};
 
-	char CSE6142::ID = 0;
-	static RegisterPass<CSE6142> X("CSE6142", "");
+	char CreateBounds::ID = 0;
+	static RegisterPass<CreateBounds> X("CreateBounds", "");
 }
