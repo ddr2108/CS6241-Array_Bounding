@@ -1,3 +1,5 @@
+#define is64 false
+
 #include "llvm/IR/Function.h"
 #include "llvm/Support/InstIterator.h"
 #include "llvm/IR/Instructions.h"
@@ -625,7 +627,11 @@ namespace
 
 								//Check to see if index is negative
 								BasicBlock* secondCheckBlock = BasicBlock::Create(block->getContext(), Twine(block->getName() + "lowerBoundCheck"), &F);
+#if is64
 								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   64),-1,false);
+#else
+								ConstantInt* zeroValue = llvm::ConstantInt::get(llvm::IntegerType::get(block->getContext(),   32),-1,false);
+#endif
 								ICmpInst* lowerBoundCheck =  new ICmpInst(*secondCheckBlock, CmpInst::ICMP_SGT, getInst->getOperand(indexOperand), zeroValue, Twine("CmpTestLower"));
 								original[secondCheckBlock] = block;
 								c_gen = new set<Value*>();
