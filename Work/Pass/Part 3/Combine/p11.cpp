@@ -62,6 +62,7 @@ namespace {
 			std::map<Instruction*, int> instructionIndex;
 			std::map<int, defInstruct*> instructionDefIndex;
 			std::map<Instruction*, int> instructionDefInstrIndex;
+			std::set<Instruction*> icmpExamined;
 
 			int *dist = NULL;						//Hold distance between any two blocks
 			int* reachDef = NULL;						//Hold reaching def for each instruction
@@ -852,7 +853,6 @@ namespace {
 										if (storeInstWithValue){
 											int defIndex = instructionDefInstrIndex[storeInstWithValue];	
 											int curIndex = instructionIndex[storeInst];
-errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+defIndex]<<"\n";
 											if (reachDef[curIndex*numDef+defIndex]>0){
 
 												canReplaceFlag = 1;
@@ -953,15 +953,15 @@ errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+de
 							curInstComboID.insert(curInstComboID.end(), instID);
 							curInstCombo.insert(curInstCombo.end(), &*i);
 						}
-						//if operation
-						if (TerminatorInst* termInst = dyn_cast<TerminatorInst>(i)){
-							int numSucc = termInst->getNumSuccessors();
-							for(int i = 0; i < numSucc; i++){
-								nextBlocks.push(termInst->getSuccessor(i));
-							}
-						}
+
 						//Compare instruction
 						if (ICmpInst* compareInst = dyn_cast<ICmpInst>(i)){
+							//Aready examined this compare
+							if (icmpExamined.find(compareInst)!=icmpExamined.end()){
+								continue;
+							}	
+							icmpExamined.insert(compareInst);	
+				
 							int valChecked = 0; 
 							
 							if (isa<Constant>(compareInst->getOperand(0))){
@@ -1028,23 +1028,55 @@ errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+de
 
 							//Try combo of values to see if a particular variation reaches
 							//if (bound > 0 && valChecked > 0)
-							for (std::vector<Value*>::iterator itr = reverseValueID[valChecked].begin(); itr != reverseValueID[valChecked].end(); ++itr){
-								for (std::vector<Value*>::iterator it = reverseValueID[bound].begin(); it != reverseValueID[bound].end(); ++it){
+errs()<<"asd\n";
+							int nextBlockFlag = 0;
+							ICmpInst* newCheck;
+							for (std::vector<Value*>::iterator itr = reverseValueID[valChecked].begin(); itr != reverseValueID[valChecked].end() && nextBlockFlag==0; ++itr){
+
+								StoreInst* firstStore = dyn_cast<StoreInst>(*itr);
+								//Find all reaching for same var
+								int reachDefIndex = instructionDefInstrIndex[firstStore];
+								int instrIndex = instructionIndex[compareInst];
+								if (reachDef[instrIndex*numDef + reachDefIndex]==0){
+									continue;
+								}
+
+								for (std::vector<Value*>::iterator it = reverseValueID[bound].begin(); it != reverseValueID[bound].end() && nextBlockFlag==0; ++it){
+
+									StoreInst* secondStore = dyn_cast<StoreInst>(*it);
+									//Find all reaching for same var
+									int reachDefIndex = instructionDefInstrIndex[secondStore];
+									int instrIndex = instructionIndex[compareInst];
+errs()<<reachDef[instrIndex*numDef + reachDefIndex]<<"\n";
+									if (reachDef[instrIndex*numDef + reachDefIndex]==0){
+										continue;
+									}
+									
+									//if we are using exact same operands, dont do it
+									if (*itr==compareInst->getOperand(0) && *it==compareInst->getOperand(1)){
+										continue;
+									}
+
 									StoreInst* storeITR = dyn_cast<StoreInst>(*itr);
 									StoreInst* storeIT = dyn_cast<StoreInst>(*it);
+
 									LoadInst *loadITR = new LoadInst(storeITR->getOperand(1), "ITR", compareInst);
 									LoadInst *loadIT = new LoadInst(storeIT->getOperand(1), "IT", compareInst);
 									ICmpInst* testCheck =  new ICmpInst(compareInst, comparison,loadITR, loadIT, Twine("Test"));
-									if (0){
+									icmpExamined.insert(testCheck);	
+									newCheck = testCheck;
+
+									nextBlockFlag = 1;
+
+									if (1){
 										//if there is a match, remove compare instruction and branch
-										testCheck->eraseFromParent();	//Erase instruction
-										compareInst->eraseFromParent();	//Erase instruction
-										loadITR->eraseFromParent();
-										loadIT->eraseFromParent();
+										//testCheck->eraseFromParent();	//Erase instruction
+										//compareInst->eraseFromParent();	//Erase instruction
+										//loadITR->eraseFromParent();
+										//loadIT->eraseFromParent();
 
 										//Go to next instruction and check if 
-										i++;
-										if (BranchInst* branchAfterCheck = dyn_cast<BranchInst>(i)){
+										/*if (BranchInst* branchAfterCheck = dyn_cast<BranchInst>(i)){
 											if (branchAfterCheck->getNumSuccessors()==2){
 
 												BasicBlock *nextBlock = branchAfterCheck->getSuccessor(0);
@@ -1068,7 +1100,7 @@ errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+de
 												break;
 											}
 
-										}
+										}*/
 
 									}else{
 										//if there is no match, just erase the new instruction
@@ -1077,6 +1109,16 @@ errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+de
 										loadIT->eraseFromParent();
 									}
 								}
+							}
+
+							if (nextBlockFlag == 1){
+								compareInst->replaceAllUsesWith(newCheck);
+								i++;
+								compareInst->eraseFromParent();
+								while (!i->isTerminator()){
+									i++;
+								}
+
 							}
 						}
 
@@ -1108,6 +1150,14 @@ errs()<<*storeInst<<"\n"<<*storeInstWithValue<<"\n"<<reachDef[curIndex*numDef+de
 							//Insert info about ongoing instruction
 							curInstComboID.insert(curInstComboID.end(), i->getOpcode());
 							curInstCombo.insert(curInstCombo.end(), &*i);
+						}
+
+						//if operation
+						if (TerminatorInst* termInst = dyn_cast<TerminatorInst>(i)){
+							int numSucc = termInst->getNumSuccessors();
+							for(int i = 0; i < numSucc; i++){
+								nextBlocks.push(termInst->getSuccessor(i));
+							}
 						}
 
 					}
