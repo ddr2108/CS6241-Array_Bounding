@@ -45,6 +45,8 @@ int main(){
 	//Show GVN with arrays
 	y = j;	
 	b[y]= c2;
+	y = y + 1;
+	b[y]= c1;
 	b[j]=i;
 
 	y = i;			//Cause Restructiring

@@ -97,8 +97,6 @@ namespace
 			//We don't know what this value is in relation to the original variable
 			if(!varModified) retn = UNKNOWN;
 
-			errs() << retn << " : " << *inst << "\n";
-
 			return retn;
 		}
 
@@ -139,7 +137,6 @@ namespace
 			//See if this block killed one of the compare's operands
 			if(changeStateOp1 != UNCHANGED || changeStateOp2 != UNCHANGED)
 			{
-				errs() << changeStateOp1 << " :: " << changeStateOp2 << "\n";
 				switch(changeStateOp1)
 				{
 				case UNKNOWN:
@@ -181,7 +178,6 @@ namespace
 			//We count equivalent constants as being the same variable
 			if(localConst != NULL && prevConst != NULL)
 			{
-				errs() << localConst->getZExtValue() << "\n";
 				if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
 			}
 
@@ -202,7 +198,7 @@ namespace
 					}
 					else if(localInst->getPredicate() == CmpInst::ICMP_SLT)
 					{
-						errs() << "SLT\n";
+						//errs() << "SLT\n";
 						if(localConst == NULL) conflict = true;
 						else if(prevConst == NULL) conflict = true;
 						else if(prevConst->uge(localConst->getZExtValue()));
@@ -210,7 +206,7 @@ namespace
 					}
 					else if(localInst->getPredicate() == CmpInst::ICMP_SGT)
 					{
-						errs() << "SGT\n";
+						//errs() << "SGT\n";
 						if(localConst == NULL) conflict = true;
 						else if(prevConst == NULL) conflict = true;
 						else if(localConst->uge(prevConst->getZExtValue()));
@@ -218,7 +214,6 @@ namespace
 					}
 					else
 					{
-						errs() << "Conflict\n";
 						conflict = true;
 					}
 				}
@@ -249,7 +244,6 @@ namespace
 				if(doRemove)
 					for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
 					{
-						errs() << "Removing = " << *remItr->first << "\n";
 						gen->erase(remItr->first);
 						remItr->first->replaceAllUsesWith(remItr->second);
 						remItr->first->eraseFromParent();
@@ -321,9 +315,9 @@ namespace
 							set<Value*> toRemove;
 
 							//See if the comparison is in the inset set
-							for(set<Value*>::iterator outItr = outs->outSet.begin(); outItr != outs->outSet.end(); outItr++)
+							for(set<Value*>::iterator outItr = inset->outSet.begin(); outItr != inset->outSet.end(); outItr++)
 							{
-								if(inset->outSet.find(*outItr) == inset->outSet.end())
+								if(outs->outSet.find(*outItr) == outs->outSet.end())
 								{
 									toRemove.insert(*outItr);
 								}
@@ -374,7 +368,6 @@ namespace
 				//Remove the redundant gen statements
 				for(map<Instruction*, Instruction*>::iterator itr = toRemove.begin(); itr != toRemove.end(); itr++)
 				{
-					errs() << "REMOVE: " << *itr->first << "\n";
 					gen->erase(itr->first);
 					itr->first->replaceAllUsesWith(itr->second);
 					itr->first->eraseFromParent();
@@ -387,7 +380,6 @@ namespace
 				//Add forward set
 				for(set<Value*>::iterator itr = forward->begin(); itr != forward->end(); itr++)
 				{
-					errs() << block->getName() << " -> " << *itr << "\n";
 					outset->outSet.insert(*itr);
 					outset->outSrc[*itr] = block;
 				}
@@ -612,7 +604,7 @@ namespace
 			}
 
 			//Optimize bounds checks
-			//calculateSets(&lastBlock);
+			calculateSets(&lastBlock);
 			calculateRedundant(&F.getEntryBlock());
 
 			//Queue of blocks
