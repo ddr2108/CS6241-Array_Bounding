@@ -1,18 +1,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-<<<<<<< HEAD
 int main()
 {
 	int d,z, k, l,j, f,g;
 	int m[5];	
 
+	int size = 4;
+
 	d = 15;
 	z = 15;
 	//m[4] = 10 + z;
 	//m[4] = 5 + z;
-	l = 10 + m[4];
-	d = 10 + m[4];
+	l = 10 + m[size];
+	d = 10 + m[size];
 	m[4] = 10 + z;
 	d = 18 + z;
 	d = 15;
@@ -98,56 +99,5 @@ if (z>5){
 	}
 
 	z= z + 15;*/
-=======
-int test(){
-	int size = 25;
-	int a[size];
-	bool branchIf = false;
-
-	int x,y;
-	int z;
-
-	x = 2;
-	y = 2*x+1;
-	z = 1*x + 1;
-	int b[y];
-	//a[y] = 3;
-	//y = z;
-	printf("Before");
-	b[z] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	printf("Before");
-	z = z + 1;
-	b[z] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	printf("Before");
-	a[5] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	printf("Before");
-	a[5] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	printf("Before");
-	a[28] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	printf("Before");
-	a[25] = 10;
-	printf("After");
-	if(branchIf)printf("Branch");
-	x = a[30];	
-	return 1;
-}
-
-int main() {
-
-	int z = test();
-	printf("%d",z);
-	
-	return 0;
->>>>>>> b75336be45ebe5d2eaaeb02f5c56828c3bc34f7a
 }
 

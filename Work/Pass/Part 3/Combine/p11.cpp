@@ -10,7 +10,7 @@
 #include "llvm/DebugInfo.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/IR/Dominators.h"
+#include "llvm/Analysis/Dominators.h"
 #include "llvm/Analysis/PostDominators.h"
 #include <map>
 #include <set>

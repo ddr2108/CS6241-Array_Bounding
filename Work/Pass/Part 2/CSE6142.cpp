@@ -167,8 +167,8 @@ namespace
 			Value* localOp1 = getBaseValue(localInst->getOperand(0));
 			Value* localOp2 = getBaseValue(localInst->getOperand(1));
 
-			errs() << *localInst << " vs " << *inst << "\n";
-			errs() << *op1 << " vs " << *localOp1 << "\n";
+			//errs() << *localInst << " vs " << *inst << "\n";
+			//errs() << *op1 << " vs " << *localOp1 << "\n";
 
 			//Oper 0 is what the index is
 			//Oper 1 is the bound we are checking
@@ -249,6 +249,7 @@ namespace
 				if(doRemove)
 					for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
 					{
+						errs() << "Removing = " << *remItr->first << "\n";
 						gen->erase(remItr->first);
 						remItr->first->replaceAllUsesWith(remItr->second);
 						remItr->first->eraseFromParent();
@@ -303,7 +304,7 @@ namespace
 				for(set<BasicBlock*>::iterator itr = preds->begin(); itr != preds->end(); itr++)
 				{
 					Output* outs = outputs[*itr];
-					if(outs == NULL)
+					if(visited.find(*itr) == visited.end())
 					{
 						isReady = false;
 						break;
@@ -322,8 +323,10 @@ namespace
 							//See if the comparison is in the inset set
 							for(set<Value*>::iterator outItr = outs->outSet.begin(); outItr != outs->outSet.end(); outItr++)
 							{
-								if(outs->outSet.find(*outItr) == outs->outSet.end())
+								if(inset->outSet.find(*outItr) == inset->outSet.end())
+								{
 									toRemove.insert(*outItr);
+								}
 							}
 
 							for(set<Value*>::iterator outItr = toRemove.begin(); outItr != toRemove.end(); outItr++)
@@ -384,6 +387,7 @@ namespace
 				//Add forward set
 				for(set<Value*>::iterator itr = forward->begin(); itr != forward->end(); itr++)
 				{
+					errs() << block->getName() << " -> " << *itr << "\n";
 					outset->outSet.insert(*itr);
 					outset->outSrc[*itr] = block;
 				}
@@ -608,7 +612,7 @@ namespace
 			}
 
 			//Optimize bounds checks
-			calculateSets(&lastBlock);
+			//calculateSets(&lastBlock);
 			calculateRedundant(&F.getEntryBlock());
 
 			//Queue of blocks
