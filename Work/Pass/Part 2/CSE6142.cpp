@@ -134,8 +134,10 @@ namespace
 			state changeStateOp1 = stateChanges[block][op1];
 			state changeStateOp2 = stateChanges[block][op2];
 
+			//errs() << block->getName() << " --" << changeStateOp1 << "-> " << *itr << " :: " << *localItr << "\n";
+
 			//See if this block killed one of the compare's operands
-			if(changeStateOp1 != UNCHANGED || changeStateOp2 != UNCHANGED)
+			if(changeStateOp1 != UNCHANGED)// || changeStateOp2 != UNCHANGED)
 			{
 				switch(changeStateOp1)
 				{
@@ -231,9 +233,9 @@ namespace
 			//errs() << "backwards: " << output->outSet.size() << "\n";
 
 			//O(n^2) loop to check for matching compares
+			map<Instruction*, Instruction*> toRemove;
 			for(set<Value*>::iterator itr = output->outSet.begin(); itr != output->outSet.end(); itr++)
 			{
-				map<Instruction*, Instruction*> toRemove;
 				bool conflict = false;
 				for(set<Value*>::iterator localItr = gen->begin(); localItr != gen->end(); localItr++)
 				{
@@ -241,16 +243,17 @@ namespace
 				}
 
 				//In the 3 step of the algorithm, we remove instructions that are redundant
-				if(doRemove)
-					for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
-					{
-						gen->erase(remItr->first);
-						remItr->first->replaceAllUsesWith(remItr->second);
-						remItr->first->eraseFromParent();
-					}
 
 				if(!conflict) S->insert(*itr);
 			}
+
+			if(doRemove)
+				for(map<Instruction*, Instruction*>::iterator remItr = toRemove.begin(); remItr != toRemove.end(); remItr++)
+				{
+					gen->erase(remItr->first);
+					remItr->first->replaceAllUsesWith(remItr->second);
+					remItr->first->eraseFromParent();
+				}
 
 			errs() << "S size: " << S->size() << "\n";
 			return S;
@@ -359,7 +362,7 @@ namespace
 						duplicate |= isDup;
 					}
 
-					//if(!duplicate)
+					if(!duplicate)
 					{
 						outset->outSet.insert(*itr);
 						outset->outSrc[*itr] = block;
