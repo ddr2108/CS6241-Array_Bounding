@@ -134,7 +134,7 @@ namespace
 			state changeStateOp1 = stateChanges[block][op1];
 			state changeStateOp2 = stateChanges[block][op2];
 
-			//errs() << block->getName() << " --" << changeStateOp1 << "-> " << *itr << " :: " << *localItr << "\n";
+			errs() << block->getName() << " --" << changeStateOp1 << "-> " << *itr << " :: " << *localItr << "\n";
 
 			//See if this block killed one of the compare's operands
 			if(changeStateOp1 != UNCHANGED)// || changeStateOp2 != UNCHANGED)
@@ -183,7 +183,7 @@ namespace
 				if(localConst->getZExtValue() == prevConst->getZExtValue()) equalConst = true;
 			}
 
-			if(localOp1 == op1 || equalConst)
+			if(!conflict && (localOp1 == op1 || equalConst))
 			{
 				//Makes sure the comparisons have the same predicate
 				if(localInst->getPredicate() == inst->getPredicate())
